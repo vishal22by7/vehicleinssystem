@@ -1,0 +1,100 @@
+# Dependencies
+node_modules/
+**/node_modules/
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+smart-contracts/.env
+fabric-simulator/.env
+oracle-service/.env
+ml-analyzer/.env
+
+# Build outputs
+frontend/.next/
+frontend/out/
+frontend/build/
+smart-contracts/artifacts/
+smart-contracts/cache/
+fabric-simulator/private-ledger/
+
+# Uploads and user-generated content
+backend/uploads/
+uploads/
+test_images/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+ml-analyzer/venv/
+ml-analyzer/.venv/
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Hardhat
+smart-contracts/cache/
+smart-contracts/artifacts/
+
+# Keep important config files
+!.vscode/settings.json.example
+!.cursor/settings.json.example

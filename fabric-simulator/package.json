@@ -1,0 +1,23 @@
+{
+  "name": "fabric-simulator",
+  "version": "1.0.0",
+  "description": "Hyperledger Fabric Simulation Service for Private Verification",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["fabric", "blockchain", "verification"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "level": "^8.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
+

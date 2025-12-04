@@ -1,0 +1,34 @@
+{
+  "name": "vims-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Vehicle Insurance Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate": "node scripts/migrate-to-postgres.js",
+    "test:db": "node scripts/test-db-connection.js",
+    "create-db": "node scripts/create-database.js",
+    "seed-policy-types": "node scripts/seed-policy-types.js",
+    "view-db": "node scripts/view-db-data.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4",
+    "express": "^4.21.1",
+    "express-validator": "^7.2.0",
+    "form-data": "^4.0.0",
+    "ipfs-http-client": "^60.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.35.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
