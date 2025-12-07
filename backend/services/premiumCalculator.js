@@ -124,9 +124,11 @@ function getIRDATPPremium(vehicleCategory, engineCapacity) {
 /**
  * Calculate Own Damage Premium
  */
-function calculateODPremium(idv, vehicleAge, vehicleType, odRate) {
-  // OD Rate is typically 2-4% of IDV depending on vehicle type
-  const baseODRate = odRate || (vehicleType === '2W' ? 0.025 : 0.03);
+function calculateODPremium(idv, vehicleAge, vehicleCategory, odRate) {
+  // OD Rate is typically 2-4% of IDV depending on vehicle category
+  // Use vehicleCategory (2W, 4W) instead of vehicleType (make/model)
+  const isTwoWheeler = vehicleCategory === '2W' || (vehicleCategory && vehicleCategory.toLowerCase().includes('2w'));
+  const baseODRate = odRate || (isTwoWheeler ? 0.025 : 0.03);
   let odPremium = idv * baseODRate;
   
   // Apply age factor (older vehicles have higher rates)
@@ -197,24 +199,49 @@ function calculatePremium(data) {
   const idv = exShowroomPrice ? calculateIDV(exShowroomPrice, yearOfManufacture, registrationDate) : null;
   const vehicleAge = new Date().getFullYear() - yearOfManufacture;
   
+  // Normalize policy type name for matching (case-insensitive)
+  const policyTypeLower = (policyType || '').toLowerCase();
+  
   // Calculate TP Premium (if required)
-  if (policyType === 'TP' || policyType === 'Comprehensive') {
+  // Check if policy type contains "TP", "Third-Party", or "Comprehensive"
+  const isTPPolicy = policyTypeLower.includes('tp') || 
+                     policyTypeLower.includes('third-party') || 
+                     policyTypeLower.includes('third party') ||
+                     policyTypeLower.includes('comprehensive');
+  
+  if (isTPPolicy) {
     breakdown.tpPremium = getIRDATPPremium(vehicleCategory, engineCapacity);
     breakdown.tpPremium += PA_COVER; // Add PA cover
+    console.log('✅ TP Premium calculated:', breakdown.tpPremium);
   }
   
   // Calculate OD Premium (if required)
-  if (policyType === 'OD' || policyType === 'Comprehensive' || policyType === 'StandaloneOD') {
+  // Check if policy type contains "OD", "Own Damage", or "Comprehensive"
+  const isODPolicy = policyTypeLower.includes('od') || 
+                     policyTypeLower.includes('own damage') ||
+                     policyTypeLower.includes('comprehensive') ||
+                     policyTypeLower.includes('standalone') ||
+                     policyTypeLower.includes('stand-alone');
+  
+  console.log('📋 OD Policy check:', { isODPolicy, policyTypeLower, hasIdv: !!idv });
+  
+  if (isODPolicy) {
     if (idv) {
-      breakdown.odPremium = calculateODPremium(idv, vehicleAge, vehicleType);
+      // Pass vehicleCategory instead of vehicleType for proper 2W/4W detection
+      breakdown.odPremium = calculateODPremium(idv, vehicleAge, vehicleCategory);
+      console.log('✅ OD Premium (before NCB):', breakdown.odPremium);
       
       // Apply NCB discount
       breakdown.ncbDiscount = calculateNCBDiscount(breakdown.odPremium, previousNCB);
       breakdown.odPremium -= breakdown.ncbDiscount;
+      console.log('✅ OD Premium (after NCB):', breakdown.odPremium, 'NCB Discount:', breakdown.ncbDiscount);
       
       // Calculate add-ons premium
       const addOnsResult = calculateAddOnsPremium(breakdown.odPremium, addOns);
       breakdown.addOnsPremium = addOnsResult.totalAddOnsPremium;
+      console.log('✅ Add-ons Premium:', breakdown.addOnsPremium);
+    } else {
+      console.warn('⚠️  IDV is null, cannot calculate OD premium');
     }
   }
   

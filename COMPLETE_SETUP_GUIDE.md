@@ -387,6 +387,12 @@ cd frontend
 npm run dev
 ```
 
+**Or use the smart start command:**
+```powershell
+npm start
+```
+This will automatically use dev mode if no production build exists, or production mode if a build is present.
+
 **Expected output:**
 ```
 ▲ Next.js 14.2.0

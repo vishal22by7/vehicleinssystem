@@ -6,13 +6,31 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { adminAPI, policyAPI } from '@/lib/api';
 
 interface Policy {
-  _id: string;
-  userId: {
+  id?: string;
+  _id?: string;
+  userId?: {
+    id?: string;
     name: string;
     email: string;
+    phone?: string;
+    role?: string;
   };
-  policyTypeId: {
+  user?: {  // Backend returns 'user' from association
+    id?: string;
     name: string;
+    email: string;
+    phone?: string;
+    role?: string;
+  };
+  policyTypeId?: {
+    id?: string;
+    name: string;
+    description?: string;
+  };
+  policyTypeRef?: {  // Backend returns 'policyTypeRef' from association
+    id?: string;
+    name: string;
+    description?: string;
   };
   vehicleBrand: string;
   vehicleModel: string;
@@ -39,7 +57,18 @@ export default function AdminPoliciesPage() {
     try {
       const res = await adminAPI.getPolicies();
       if (res.data.success) {
-        setPolicies(res.data.policies);
+        // Normalize data: map backend field names to frontend expectations
+        // Backend returns 'user' and 'policyTypeRef', but frontend expects 'userId' and 'policyTypeId'
+        const policies = res.data.policies.map((p: any) => ({
+          ...p,
+          id: p.id || p._id,
+          _id: p._id || p.id,
+          // Map 'user' to 'userId' for consistency
+          userId: p.user || p.userId,
+          // Map 'policyTypeRef' to 'policyTypeId' for consistency
+          policyTypeId: p.policyTypeRef || p.policyTypeId
+        }));
+        setPolicies(policies);
       }
     } catch (error) {
       toast.error('Failed to load policies');
@@ -126,21 +155,42 @@ export default function AdminPoliciesPage() {
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {policies.map((policy) => {
+                    const policyId = policy.id || policy._id;
                     const isActive = new Date(policy.endDate) > new Date();
+                    // Get user info (from userId or user field)
+                    const user = policy.userId || policy.user;
+                    // Get policy type info (from policyTypeId or policyTypeRef field)
+                    const policyType = policy.policyTypeId || policy.policyTypeRef;
+                    
                     return (
-                      <tr key={policy._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr key={policyId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {policy.userId?.name || 'N/A'}
+                            {user?.name || 'N/A'}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {policy.userId?.email || 'N/A'}
+                            {user?.email || 'N/A'}
                           </div>
+                          {user?.phone && (
+                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                              📱 {user.phone}
+                            </div>
+                          )}
+                          {user?.role && user.role !== 'user' && (
+                            <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                              {user.role.toUpperCase()}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900 dark:text-white">
-                            {policy.policyTypeId?.name || 'N/A'}
+                            {policyType?.name || 'N/A'}
                           </div>
+                          {policyType?.description && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs truncate">
+                              {policyType.description}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -179,7 +229,7 @@ export default function AdminPoliciesPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
-                            onClick={() => handleDelete(policy._id)}
+                            onClick={() => handleDelete(policyId || '')}
                             className="text-red-600 hover:text-red-900 dark:text-red-400"
                           >
                             Delete

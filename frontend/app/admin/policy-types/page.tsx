@@ -6,7 +6,8 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { adminAPI } from '@/lib/api';
 
 interface PolicyType {
-  _id: string;
+  id?: string;  // Sequelize uses 'id'
+  _id?: string; // Fallback for compatibility
   name: string;
   description: string;
   baseRate: number;
@@ -37,7 +38,13 @@ export default function AdminPolicyTypesPage() {
     try {
       const res = await adminAPI.getPolicyTypes();
       if (res.data.success) {
-        setPolicyTypes(res.data.policyTypes);
+        // Ensure we have the ID field - Sequelize returns 'id', not '_id'
+        const policyTypes = res.data.policyTypes.map((pt: any) => ({
+          ...pt,
+          id: pt.id || pt._id, // Use 'id' from Sequelize, fallback to '_id' if present
+          _id: pt._id || pt.id // Also include '_id' for compatibility
+        }));
+        setPolicyTypes(policyTypes);
       }
     } catch (error) {
       toast.error('Failed to load policy types');
@@ -97,7 +104,12 @@ export default function AdminPolicyTypesPage() {
   };
 
   const handleEdit = (policyType: PolicyType) => {
-    setEditing(policyType._id);
+    const id = policyType.id || policyType._id;
+    if (!id) {
+      toast.error('Invalid policy type: missing ID');
+      return;
+    }
+    setEditing(id);
     setFormData({
       name: policyType.name,
       description: policyType.description,
@@ -110,6 +122,11 @@ export default function AdminPolicyTypesPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!id) {
+      toast.error('Invalid policy type ID');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this policy type?')) {
       return;
     }
@@ -279,8 +296,10 @@ export default function AdminPolicyTypesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {policyTypes.map((pt) => (
-                    <tr key={pt._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  {policyTypes.map((pt) => {
+                    const policyTypeId = pt.id || pt._id || 'unknown';
+                    return (
+                    <tr key={policyTypeId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{pt.name}</div>
                       </td>
@@ -305,7 +324,13 @@ export default function AdminPolicyTypesPage() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDelete(pt._id)}
+                            onClick={() => {
+                              if (policyTypeId && policyTypeId !== 'unknown') {
+                                handleDelete(policyTypeId);
+                              } else {
+                                toast.error('Cannot delete: Invalid policy type ID');
+                              }
+                            }}
                             className="text-red-600 hover:text-red-900 dark:text-red-400"
                           >
                             Delete
@@ -313,7 +338,8 @@ export default function AdminPolicyTypesPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

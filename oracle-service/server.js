@@ -2,6 +2,25 @@
  * Oracle Automation Service
  * Connects all components: Ethereum, ML Analyzer, Fabric-sim, and Main Backend
  */
+
+// CRITICAL: Suppress ethers errors BEFORE importing ethers
+const originalError = console.error;
+const originalWarn = console.warn;
+console.error = function(...args) {
+  const message = args[0]?.toString() || '';
+  if (message.includes('JsonRpcProvider failed to detect network')) {
+    return; // Suppress this error completely
+  }
+  originalError.apply(console, args);
+};
+console.warn = function(...args) {
+  const message = args[0]?.toString() || '';
+  if (message.includes('JsonRpcProvider failed to detect network')) {
+    return; // Suppress this warning completely
+  }
+  originalWarn.apply(console, args);
+};
+
 const express = require('express');
 const cors = require('cors');
 const { ethers } = require('ethers');
@@ -43,13 +62,44 @@ async function initBlockchain() {
       return;
     }
 
-    // Retry logic: Wait for blockchain node to be ready
+    // Check if blockchain node is available before creating provider
+    let nodeAvailable = false;
+    try {
+      await axios.post(BLOCKCHAIN_RPC_URL, {
+        jsonrpc: '2.0',
+        method: 'eth_blockNumber',
+        params: [],
+        id: 1
+      }, { timeout: 2000 });
+      nodeAvailable = true;
+    } catch (connectionError) {
+      console.warn('⚠️  Blockchain node not available at ' + BLOCKCHAIN_RPC_URL);
+      console.warn('   Oracle blockchain features disabled. Start Hardhat node with: cd smart-contracts && npx hardhat node');
+      console.warn('   ⚠️  Will retry in background every 30 seconds...');
+      return; // Don't create provider if node is not available
+    }
+
+    // Only proceed if node is available
+    if (!nodeAvailable) {
+      return;
+    }
+
+    // Retry logic: Wait for blockchain node to be ready (with connection check)
     let retries = 10;
     let connected = false;
     let lastError = null;
     
     while (retries > 0 && !connected) {
       try {
+        // Test connection first before creating provider
+        const testResponse = await axios.post(BLOCKCHAIN_RPC_URL, {
+          jsonrpc: '2.0',
+          method: 'eth_blockNumber',
+          params: [],
+          id: 1
+        }, { timeout: 2000 });
+        
+        // Only create provider if connection test succeeds
         provider = new ethers.JsonRpcProvider(BLOCKCHAIN_RPC_URL);
         // Test connection by getting block number with timeout
         const blockNumber = await Promise.race([
@@ -433,12 +483,23 @@ initBlockchain().then(() => {
         // Continue retrying
       }
     } else if (!provider) {
-      // No provider - try full initialization
-      console.log('🔄 Retrying blockchain connection...');
-      await initBlockchain();
-      if (contract) {
-        console.log('✅ Blockchain connection established!');
-        clearInterval(retryInterval);
+      // No provider - check if node is available before retrying
+      try {
+        await axios.post(BLOCKCHAIN_RPC_URL, {
+          jsonrpc: '2.0',
+          method: 'eth_blockNumber',
+          params: [],
+          id: 1
+        }, { timeout: 2000 });
+        // Node is available, try full initialization
+        console.log('🔄 Retrying blockchain connection...');
+        await initBlockchain();
+        if (contract) {
+          console.log('✅ Blockchain connection established!');
+          clearInterval(retryInterval);
+        }
+      } catch (error) {
+        // Node still not available, continue waiting
       }
     } else {
       clearInterval(retryInterval);

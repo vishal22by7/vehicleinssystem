@@ -9,12 +9,18 @@ import { claimAPI } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 interface Claim {
-  _id: string;
+  id?: string;  // Sequelize uses 'id'
+  _id?: string; // Fallback for compatibility
   description: string;
   status: string;
   submittedAt: string;
   mlSeverity?: number;
-  policyId: {
+  policy?: {  // Backend returns 'policy', not 'policyId'
+    vehicleBrand: string;
+    vehicleModel: string;
+    registrationNumber: string;
+  };
+  policyId?: {  // Keep for backward compatibility
     vehicleBrand: string;
     vehicleModel: string;
     registrationNumber: string;
@@ -45,7 +51,17 @@ export default function ClaimsPage() {
     try {
       const res = await claimAPI.getAll();
       if (res.data.success) {
-        setClaims(res.data.claims);
+        // Normalize data to ensure both 'id' and '_id' are available
+        // Also normalize policy data (backend returns 'policy', frontend may expect 'policyId')
+        const normalizedClaims = res.data.claims.map((claim: any) => ({
+          ...claim,
+          id: claim.id || claim._id,
+          _id: claim._id || claim.id,
+          // Backend returns 'policy', but we'll also add it as 'policyId' for compatibility
+          policyId: claim.policy || claim.policyId,
+          policy: claim.policy || claim.policyId
+        }));
+        setClaims(normalizedClaims);
       }
     } catch (error) {
       console.error('Failed to load claims:', error);
@@ -140,15 +156,24 @@ export default function ClaimsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {claims.map((claim) => (
-                  <tr key={claim._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {claims.map((claim) => {
+                  const claimId = claim.id || claim._id;
+                  const policy = claim.policy || claim.policyId;
+                  return (
+                  <tr key={claimId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {claim.policyId?.vehicleBrand} {claim.policyId?.vehicleModel}
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {claim.policyId?.registrationNumber}
-                      </div>
+                      {policy ? (
+                        <>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {policy.vehicleBrand} {policy.vehicleModel}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            {policy.registrationNumber}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-sm text-gray-500 dark:text-gray-400">N/A</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900 dark:text-white max-w-md truncate">
@@ -188,14 +213,14 @@ export default function ClaimsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <Link
-                        href={`/claims/${claim._id}`}
+                        href={`/claims/${claimId}`}
                         className="text-blue-600 hover:text-blue-900 dark:text-blue-400 mr-4"
                       >
                         View
                       </Link>
                       {claim.status === 'Submitted' && (
                         <button
-                          onClick={() => handleDelete(claim._id)}
+                          onClick={() => handleDelete(claimId || '')}
                           className="text-red-600 hover:text-red-900 dark:text-red-400"
                         >
                           Delete
@@ -203,7 +228,8 @@ export default function ClaimsPage() {
                       )}
                     </td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>

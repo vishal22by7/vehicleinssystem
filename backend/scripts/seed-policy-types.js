@@ -35,17 +35,6 @@ const policyTypes = [
     }
   },
   {
-    name: 'Commercial Vehicle Package – Goods Carrier',
-    description: 'Comprehensive cover for light commercial goods carriers.',
-    baseRate: 12000,
-    ageFactor: 0.018,
-    engineFactor: 0.0035,
-    addOns: {
-      'Hull Damage Cover': 0.06,
-      'Legal Liability Driver/Conductor': 0.03
-    }
-  },
-  {
     name: 'Two-Wheeler Comprehensive',
     description: 'Complete protection for motorcycles and scooters.',
     baseRate: 3000,
@@ -81,17 +70,6 @@ const policyTypes = [
     }
   },
   {
-    name: 'Pay-as-You-Drive Private Car',
-    description: 'Usage-based plan for private cars with telematics-based discounts.',
-    baseRate: 7500,
-    ageFactor: 0.011,
-    engineFactor: 0.002,
-    addOns: {
-      'Zero Depreciation': 0.18,
-      'Daily Allowance': 0.03
-    }
-  },
-  {
     name: 'Two-Wheeler Third-Party – 5 Year',
     description: 'Long-term TP plan for new two-wheelers as per IRDAI mandate.',
     baseRate: 5200,
@@ -99,29 +77,6 @@ const policyTypes = [
     engineFactor: 0.001,
     addOns: {}
   },
-  {
-    name: 'Commercial Passenger Bus Package',
-    description: 'All-inclusive cover for tourist and city passenger buses.',
-    baseRate: 18500,
-    ageFactor: 0.02,
-    engineFactor: 0.0045,
-    addOns: {
-      'Personal Accident Driver': 0.04,
-      'Passenger Liability': 0.05,
-      'Loss of Revenue': 0.06
-    }
-  },
-  {
-    name: 'Taxi & Fleet Comprehensive',
-    description: 'Aggregated cover for yellow-plate taxis and ride-sharing fleets.',
-    baseRate: 14000,
-    ageFactor: 0.017,
-    engineFactor: 0.0032,
-    addOns: {
-      'Legal Liability Paid Driver': 0.03,
-      'Engine Protect': 0.07
-    }
-  }
 ];
 
 async function seedPolicyTypes() {

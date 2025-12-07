@@ -211,8 +211,16 @@ router.get('/policies', async (req, res) => {
   try {
     const policies = await Policy.findAll({
       include: [
-        { model: User, as: 'user', attributes: ['name', 'email'] },
-        { model: PolicyType, as: 'policyTypeRef', attributes: ['name', 'description'] }
+        { 
+          model: User, 
+          as: 'user', 
+          attributes: ['id', 'name', 'email', 'phone', 'role'] 
+        },
+        { 
+          model: PolicyType, 
+          as: 'policyTypeRef', 
+          attributes: ['id', 'name', 'description'] 
+        }
       ],
       order: [['createdAt', 'DESC']]
     });

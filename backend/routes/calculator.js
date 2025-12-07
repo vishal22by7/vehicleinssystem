@@ -7,18 +7,21 @@ const router = express.Router();
 
 // Get all policy types (public endpoint for calculator and buy policy)
 router.get('/policy-types', async (req, res) => {
+  console.log('📋 Policy types request received');
   try {
     const policyTypes = await PolicyType.findAll({
       attributes: ['id', 'name', 'description', 'baseRate', 'ageFactor', 'engineFactor', 'addOns'],
       order: [['createdAt', 'DESC']]
     });
 
+    console.log(`✅ Found ${policyTypes.length} policy types`);
     res.json({
       success: true,
       policyTypes
     });
   } catch (error) {
-    console.error('Get policy types error:', error);
+    console.error('❌ Get policy types error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -49,7 +52,7 @@ router.post('/premium', [
     } = req.body;
 
     // Use premium calculator service
-    const result = premiumCalculator.calculatePremium({
+    const calculationData = {
       vehicleCategory,
       policyType,
       engineCapacity: parseFloat(engineCapacity),
@@ -59,18 +62,24 @@ router.post('/premium', [
       previousNCB: parseFloat(previousNCB) || 0,
       addOns: Array.isArray(addOns) ? addOns : [],
       vehicleType
-    });
+    };
 
-    res.json({
+    const result = premiumCalculator.calculatePremium(calculationData);
+
+    const response = {
       success: true,
       calculation: {
         idv: result.idv,
         ...result.breakdown,
         ncbPercentage: result.ncbPercentage
       }
-    });
+    };
+
+    console.log('📤 Sending response');
+    res.json(response);
   } catch (error) {
-    console.error('Premium calculation error:', error);
+    console.error('❌ Premium calculation error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       message: 'Server error',

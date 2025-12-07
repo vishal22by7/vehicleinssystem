@@ -1,3 +1,6 @@
+// Suppress ethers.js network detection errors globally - MUST BE FIRST
+require('./utils/suppressEthersErrors');
+
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');

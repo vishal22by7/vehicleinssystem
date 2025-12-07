@@ -7,12 +7,17 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { policyAPI, claimAPI } from '@/lib/api';
 
 interface Policy {
-  _id: string;
+  id?: string;  // Sequelize uses 'id'
+  _id?: string; // Fallback for compatibility
   vehicleBrand: string;
   vehicleModel: string;
   registrationNumber: string;
   modelYear: number;
-  policyTypeId: {
+  endDate?: string;
+  policyTypeId?: {
+    name: string;
+  };
+  policyTypeRef?: {
     name: string;
   };
 }
@@ -37,9 +42,17 @@ export default function SubmitClaimPage() {
     try {
       const res = await policyAPI.getAll();
       if (res.data.success) {
+        // Normalize data to ensure both 'id' and '_id' are available
+        const normalizedPolicies = res.data.policies.map((p: any) => ({
+          ...p,
+          id: p.id || p._id,
+          _id: p._id || p.id,
+          policyTypeId: p.policyTypeId || p.policyTypeRef || { name: 'N/A' }
+        }));
+        
         // Filter only active policies
-        const activePolicies = res.data.policies.filter((p: Policy) => {
-          const endDate = new Date(p.endDate || p['endDate']);
+        const activePolicies = normalizedPolicies.filter((p: Policy) => {
+          const endDate = new Date(p.endDate || '');
           return endDate >= new Date();
         });
         setPolicies(activePolicies);
@@ -72,8 +85,30 @@ export default function SubmitClaimPage() {
     setLoading(true);
 
     try {
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('You are not logged in. Please log in again.');
+        router.push('/login');
+        return;
+      }
+
+      // Validate policyId is a valid UUID
+      if (!formData.policyId || formData.policyId.trim() === '') {
+        toast.error('Please select a policy');
+        return;
+      }
+      
+      // Check if policyId looks like a UUID (basic validation)
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidPattern.test(formData.policyId)) {
+        toast.error('Invalid policy selected. Please select a policy again.');
+        console.error('Invalid policyId format:', formData.policyId);
+        return;
+      }
+
       const formDataToSend = new FormData();
-      formDataToSend.append('policyId', formData.policyId);
+      formDataToSend.append('policyId', formData.policyId.trim());
       formDataToSend.append('description', formData.description);
       formDataToSend.append('incidentDate', formData.incidentDate);
       formDataToSend.append('incidentLocation', formData.incidentLocation);
@@ -88,7 +123,15 @@ export default function SubmitClaimPage() {
         router.push('/claims');
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to submit claim');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit claim';
+      toast.error(errorMessage);
+      
+      // If token error, redirect to login
+      if (errorMessage.includes('token') || errorMessage.includes('authentication') || error.response?.status === 401) {
+        setTimeout(() => {
+          router.push('/login');
+        }, 2000);
+      }
     } finally {
       setLoading(false);
     }
@@ -117,11 +160,15 @@ export default function SubmitClaimPage() {
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
                 <option value="">Select a policy</option>
-                {policies.map((policy) => (
-                  <option key={policy._id} value={policy._id}>
-                    {policy.policyTypeId?.name || 'N/A'} - {policy.vehicleBrand} {policy.vehicleModel} ({policy.registrationNumber})
-                  </option>
-                ))}
+                {policies.map((policy) => {
+                  const policyId = policy.id || policy._id;
+                  const policyTypeName = policy.policyTypeId?.name || policy.policyTypeRef?.name || 'N/A';
+                  return (
+                    <option key={policyId} value={policyId}>
+                      {policyTypeName} - {policy.vehicleBrand} {policy.vehicleModel} ({policy.registrationNumber})
+                    </option>
+                  );
+                })}
               </select>
               {policies.length === 0 && (
                 <p className="mt-2 text-sm text-red-600 dark:text-red-400">

@@ -82,23 +82,87 @@ JWT_EXPIRE=7d
 
 **⚠️ Replace `your_postgres_password_here` with your PostgreSQL password!**
 
-### Step 5: Start Services
+### Step 5: Setup Blockchain (REQUIRED)
 
-**Terminal 1 - Backend:**
+**🚨 IMPORTANT: Blockchain is a core part of this project. Without it, many features won't work!**
+
+**Step 5a: Start Hardhat Blockchain Node**
+
+**Terminal 1 - Blockchain (Start this FIRST):**
+```bash
+cd smart-contracts
+npx hardhat node
+```
+
+✅ Wait for: `Started HTTP and WebSocket JSON-RPC server at http://127.0.0.1:8545/`
+
+**Keep this terminal open!** The blockchain node must stay running.
+
+**Step 5b: Copy Private Key**
+
+When Hardhat starts, it shows test accounts. **Copy one private key** (the long hex string starting with `0x`).
+
+Example:
+```
+Account #0: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 (10000 ETH)
+Private Key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+```
+
+**Step 5c: Deploy Smart Contract**
+
+**Terminal 2 - Deploy Contract:**
+```bash
+cd smart-contracts
+npm run deploy
+```
+
+**Copy the deployed contract address** from the output.
+
+**Step 5d: Update Backend .env**
+
+Add to `backend/.env`:
+```env
+BLOCKCHAIN_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+SMART_CONTRACT_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
+```
+
+**Replace with your actual values!**
+
+**📖 For detailed instructions, see:** `smart-contracts/DEPLOY_INSTRUCTIONS.md`
+
+**🔍 Verify blockchain setup:**
+```bash
+node utils/check-blockchain-setup.js
+```
+
+### Step 6: Start Services
+
+**Terminal 3 - Backend:**
 ```bash
 cd backend
 npm run dev
 ```
 ✅ Wait for: `🚀 Server running on http://localhost:5000`
 
-**Terminal 2 - Frontend:**
+**Terminal 4 - Frontend:**
 ```bash
 cd frontend
 npm run dev
 ```
 ✅ Wait for: `Local: http://localhost:3000`
 
-### Step 6: Initialize Data
+**💡 Note:** You can also use `npm start` - it will automatically use dev mode if no production build exists.
+
+**💡 Quick Start All Services:**
+```bash
+# Windows
+start-all.bat
+
+# Or use the Node.js version (waits for blockchain)
+node start-all-with-blockchain.js
+```
+
+### Step 7: Initialize Data
 
 **In a new terminal:**
 ```bash
@@ -120,13 +184,17 @@ npm run create-test-user
 
 ## ✅ Verify Setup
 
-1. **Backend:** http://localhost:5000/api/health
-   - Should return: `{"status": "ok"}`
+1. **Blockchain:** Check Terminal 1 shows `Started HTTP and WebSocket JSON-RPC server`
+   - Or run: `node utils/check-blockchain-setup.js`
 
-2. **Frontend:** http://localhost:3000
+2. **Backend:** http://localhost:5000/api/health
+   - Should return: `{"status": "ok"}`
+   - Should show: `✅ Blockchain service initialized` (if blockchain is configured)
+
+3. **Frontend:** http://localhost:3000
    - Should show login page
 
-3. **Login Test:**
+4. **Login Test:**
    - Email: `test@test.com`
    - Password: `test123`
 

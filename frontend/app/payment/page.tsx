@@ -67,6 +67,8 @@ export default function PaymentPage() {
       setFormData(data);
       setPremium(data.premium || 0);
       setPremiumBreakdown(data.premiumBreakdown);
+      
+      // Files are stored in window.__policyFiles and will be validated on payment
     } catch (error) {
       toast.error('Invalid policy data');
       router.push('/buy-policy');
@@ -105,6 +107,23 @@ export default function PaymentPage() {
       
       // Get files from window object (stored before navigation)
       const files = (window as any).__policyFiles || {};
+      
+      // Debug: Log files to see what we have
+      console.log('Files from window.__policyFiles:', files);
+      console.log('RC Document file:', files.rcDocument);
+      console.log('File names from formData:', formData.fileNames);
+      
+      // Validate that RC document exists
+      if (!files.rcDocument) {
+        console.error('RC Document missing from files object');
+        throw new Error('RC Document is required. Please go back to the Documents step and upload your RC document, then proceed to payment again.');
+      }
+      
+      // Validate file is actually a File object
+      if (!(files.rcDocument instanceof File)) {
+        console.error('RC Document is not a valid File object:', typeof files.rcDocument);
+        throw new Error('RC Document file is invalid. Please go back and upload your RC document again.');
+      }
       
       // Create FormData for policy purchase
       const formDataToSend = new FormData();
@@ -150,6 +169,39 @@ export default function PaymentPage() {
         } : {}
       };
 
+      // FIRST: Add files (they're not in formData, they're in the files object)
+      // RC Document is REQUIRED
+      if (!files.rcDocument) {
+        throw new Error('RC Document is required. Please go back and upload your RC document.');
+      }
+      if (!(files.rcDocument instanceof File)) {
+        throw new Error('RC Document file is invalid. Please go back and upload your RC document again.');
+      }
+      formDataToSend.append('rcDocument', files.rcDocument);
+      
+      // Add other optional files
+      if (files.salesInvoice && files.salesInvoice instanceof File) {
+        formDataToSend.append('salesInvoice', files.salesInvoice);
+      }
+      if (files.previousPolicyCopy && files.previousPolicyCopy instanceof File) {
+        formDataToSend.append('previousPolicyCopy', files.previousPolicyCopy);
+      }
+      if (files.puc && files.puc instanceof File) {
+        formDataToSend.append('puc', files.puc);
+      }
+      if (files.dl && files.dl instanceof File) {
+        formDataToSend.append('dl', files.dl);
+      }
+      
+      // Add vehicle photos
+      if (files.vehiclePhotos && Array.isArray(files.vehiclePhotos)) {
+        files.vehiclePhotos.forEach((photo: File, index: number) => {
+          if (photo instanceof File) {
+            formDataToSend.append(`vehiclePhoto_${index}`, photo);
+          }
+        });
+      }
+
       // Add all form fields with proper mapping
       Object.keys(formData).forEach(key => {
         if (key === 'addOns') {
@@ -160,19 +212,9 @@ export default function PaymentPage() {
           if (formData[key]) {
             formDataToSend.append(key, JSON.stringify(formData[key]));
           }
-        } else if (key === 'vehiclePhotos') {
-          // Add vehicle photos from files object
-          if (files.vehiclePhotos && Array.isArray(files.vehiclePhotos)) {
-            files.vehiclePhotos.forEach((photo: File, index: number) => {
-              formDataToSend.append(`vehiclePhoto_${index}`, photo);
-            });
-          }
-        } else if (key === 'rcDocument' || key === 'salesInvoice' || key === 'previousPolicyCopy' || 
-                   key === 'puc' || key === 'dl') {
-          // Add file if it exists
-          if (files[key]) {
-            formDataToSend.append(key, files[key]);
-          }
+        } else if (key === 'vehiclePhotos' || key === 'rcDocument' || key === 'salesInvoice' || 
+                   key === 'previousPolicyCopy' || key === 'puc' || key === 'dl') {
+          // Files are already handled above, skip here
         } else if (key === 'make') {
           // Map 'make' to 'vehicleBrand'
           formDataToSend.append('vehicleBrand', String(formData[key] || ''));
@@ -209,14 +251,81 @@ export default function PaymentPage() {
       formDataToSend.append('startDate', formData.startDate);
       formDataToSend.append('endDate', formData.endDate);
       
-      // Ensure vehicleType is set (default to 'Car' if not provided)
-      if (!formData.vehicleType) {
-        formDataToSend.append('vehicleType', 'Car');
+      // CRITICAL: Ensure all required backend fields are set
+      // These are required by backend validation and must be present
+      
+      // vehicleType (required) - use vehicleCategory or default
+      if (!formDataToSend.has('vehicleType')) {
+        const vehicleTypeValue = formData.vehicleType || formData.vehicleCategory || 'Car';
+        formDataToSend.append('vehicleType', vehicleTypeValue);
       }
       
-      // Ensure modelYear is set
-      if (!formData.modelYear && formData.yearOfManufacture) {
-        formDataToSend.append('modelYear', String(formData.yearOfManufacture));
+      // vehicleBrand (required) - mapped from 'make'
+      if (!formDataToSend.has('vehicleBrand')) {
+        const brandValue = formData.make || formData.vehicleBrand || '';
+        if (brandValue) {
+          formDataToSend.append('vehicleBrand', String(brandValue));
+        }
+      }
+      
+      // vehicleModel (required) - mapped from 'model'
+      if (!formDataToSend.has('vehicleModel')) {
+        const modelValue = formData.model || formData.vehicleModel || '';
+        if (modelValue) {
+          formDataToSend.append('vehicleModel', String(modelValue));
+        }
+      }
+      
+      // modelYear (required) - must be integer
+      if (!formDataToSend.has('modelYear')) {
+        const yearValue = formData.modelYear || formData.yearOfManufacture || new Date().getFullYear();
+        formDataToSend.append('modelYear', String(parseInt(String(yearValue))));
+      }
+      
+      // engineCapacity (required) - must be float
+      if (!formDataToSend.has('engineCapacity')) {
+        const capacityValue = formData.engineCapacity || '0';
+        formDataToSend.append('engineCapacity', String(parseFloat(String(capacityValue))));
+      }
+      
+      // registrationNumber (required)
+      if (!formDataToSend.has('registrationNumber')) {
+        const regNum = formData.registrationNumber || '';
+        if (regNum) {
+          formDataToSend.append('registrationNumber', String(regNum));
+        }
+      }
+      
+      // chassisNumber (required)
+      if (!formDataToSend.has('chassisNumber')) {
+        const chassisNum = formData.chassisNumber || '';
+        if (chassisNum) {
+          formDataToSend.append('chassisNumber', String(chassisNum));
+        }
+      }
+      
+      // Optional but helpful fields
+      if (formData.vehicleCategory && !formDataToSend.has('vehicleCategory')) {
+        formDataToSend.append('vehicleCategory', formData.vehicleCategory);
+      }
+      if (formData.coverType && !formDataToSend.has('coverType')) {
+        formDataToSend.append('coverType', formData.coverType);
+      }
+      if (formData.registrationDate && !formDataToSend.has('registrationDate')) {
+        formDataToSend.append('registrationDate', formData.registrationDate);
+      }
+
+      // Verify RC document is in FormData
+      let hasRcDocument = false;
+      for (const [key, value] of formDataToSend.entries()) {
+        if (key === 'rcDocument' && value instanceof File) {
+          hasRcDocument = true;
+          break;
+        }
+      }
+      
+      if (!hasRcDocument) {
+        throw new Error('RC Document was not added to FormData. Please go back and upload your RC document again.');
       }
 
       // Create the policy (payment is considered successful in demo mode)
@@ -232,10 +341,27 @@ export default function PaymentPage() {
       }
     } catch (error: any) {
       // Show detailed error message
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.errors?.[0]?.msg ||
-                          error.message || 
-                          'Failed to process payment. Please try again.';
+      let errorMessage = 'Failed to process payment. Please try again.';
+      
+      if (error.response?.data) {
+        // If there are validation errors, show them
+        if (error.response.data.errors && Array.isArray(error.response.data.errors)) {
+          const errorList = error.response.data.errors.map((e: any) => 
+            e.msg || e.message || `${e.param || 'Field'}: ${e.msg || e.message || 'Invalid'}`
+          ).join(', ');
+          errorMessage = `Validation errors: ${errorList}`;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Only log errors in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Payment error:', error.response?.data || error.message);
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);

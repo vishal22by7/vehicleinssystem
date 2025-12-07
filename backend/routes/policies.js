@@ -114,6 +114,39 @@ function validateChassisNumber(chassisNumber) {
   return vinPattern.test(cleaned);
 }
 
+/**
+ * Map policy type name to database enum value
+ * Database enum only accepts: 'TP', 'OD', 'Comprehensive', 'StandaloneOD'
+ */
+function mapPolicyTypeToEnum(policyTypeName) {
+  if (!policyTypeName) {
+    return 'Comprehensive'; // Default
+  }
+  
+  const normalized = policyTypeName.toLowerCase().trim();
+  
+  // Check for TP/Third-Party
+  if (normalized.includes('tp') || 
+      normalized.includes('third-party') || 
+      normalized.includes('third party')) {
+    return 'TP';
+  }
+  
+  // Check for OD/Own Damage (but not StandaloneOD)
+  if ((normalized.includes('od') || normalized.includes('own damage')) &&
+      !normalized.includes('standalone') && !normalized.includes('stand-alone')) {
+    return 'OD';
+  }
+  
+  // Check for StandaloneOD
+  if (normalized.includes('standalone') || normalized.includes('stand-alone')) {
+    return 'StandaloneOD';
+  }
+  
+  // Default to Comprehensive (covers "Comprehensive", "Two-Wheeler Comprehensive", etc.)
+  return 'Comprehensive';
+}
+
 // Buy policy
 router.post('/buy', auth, upload.fields([
   { name: 'rcDocument', maxCount: 1 },
@@ -143,7 +176,11 @@ router.post('/buy', auth, upload.fields([
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array() });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Validation failed',
+        errors: errors.array() 
+      });
     }
 
     // Parse form data (can be JSON strings from FormData)
@@ -217,7 +254,11 @@ router.post('/buy', auth, upload.fields([
     const end = new Date(endDate);
     const now = new Date();
     
-    if (start < now) {
+    // Allow start date to be today (compare dates only, not time)
+    const startDateOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    if (startDateOnly < nowDateOnly) {
       return res.status(400).json({ success: false, message: 'Start date cannot be in the past' });
     }
     
@@ -382,12 +423,15 @@ router.post('/buy', auth, upload.fields([
     // Generate proposal number
     const proposalNumber = `VIMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
+    // Map policy type name to database enum value
+    const mappedPolicyType = mapPolicyTypeToEnum(policyTypeValue);
+
     // Create policy with all Indian insurance fields
     const policy = await Policy.create({
       userId: req.user.id,
       policyTypeId,
       vehicleCategory: vehicleCategory || '4W',
-      policyType: policyTypeValue || 'Comprehensive',
+      policyType: mappedPolicyType, // Use mapped enum value
       usageType: usageType || 'Private',
       coverType: coverType || 'New',
       premium: parseFloat(premium),

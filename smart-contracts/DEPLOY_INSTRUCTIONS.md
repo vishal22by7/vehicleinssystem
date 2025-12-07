@@ -98,6 +98,6 @@ npm run dev
 **Terminal 4 (Frontend):**
 ```bash
 cd frontend
-npm start
+npm run dev
 ```
 

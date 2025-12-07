@@ -1,3 +1,18 @@
+// Suppress ethers errors BEFORE importing ethers (critical!)
+// This must happen before ethers.JsonRpcProvider is used anywhere
+const originalError = console.error;
+const originalWarn = console.warn;
+console.error = function(...args) {
+  const msg = args[0]?.toString() || '';
+  if (msg.includes('JsonRpcProvider failed to detect network')) return;
+  originalError.apply(console, args);
+};
+console.warn = function(...args) {
+  const msg = args[0]?.toString() || '';
+  if (msg.includes('JsonRpcProvider failed to detect network')) return;
+  originalWarn.apply(console, args);
+};
+
 const { ethers } = require('ethers');
 const path = require('path');
 const fs = require('fs');
@@ -58,7 +73,10 @@ class BlockchainService {
     this.init();
   }
 
-  async init() {
+  async init(retryCount = 0) {
+    const maxRetries = 5;
+    const retryDelay = 10000; // 10 seconds
+
     try {
       const rpcUrl = process.env.BLOCKCHAIN_RPC_URL || 'http://localhost:8545';
       const privateKey = process.env.BLOCKCHAIN_PRIVATE_KEY;
@@ -68,13 +86,57 @@ class BlockchainService {
           privateKey === 'your-private-key-here' || 
           privateKey === '0xyour-private-key-here' ||
           privateKey.length < 64) {
-        console.warn('⚠️  Blockchain private key not set or invalid, blockchain features disabled');
-        console.warn('   To enable blockchain: Set BLOCKCHAIN_PRIVATE_KEY in .env with a valid private key');
+        if (retryCount === 0) {
+          console.warn('⚠️  Blockchain private key not set or invalid, blockchain features disabled');
+          console.warn('   To enable blockchain: Set BLOCKCHAIN_PRIVATE_KEY in .env with a valid private key');
+        }
         return;
       }
 
-      // Validate private key format
+      // Check if blockchain node is available before creating provider
+      let nodeAvailable = false;
       try {
+        const axios = require('axios');
+        await axios.post(rpcUrl, {
+          jsonrpc: '2.0',
+          method: 'eth_blockNumber',
+          params: [],
+          id: 1
+        }, { timeout: 2000 });
+        nodeAvailable = true;
+      } catch (connectionError) {
+        // Node not available - retry if we haven't exceeded max retries
+        if (retryCount < maxRetries) {
+          if (retryCount === 0) {
+            console.warn('⚠️  Blockchain node not available at ' + rpcUrl);
+            console.warn('   Will retry connection in background...');
+            console.warn('   Start Hardhat node with: cd smart-contracts && npx hardhat node');
+          }
+          // Retry after delay
+          setTimeout(() => {
+            this.init(retryCount + 1);
+          }, retryDelay);
+          return;
+        } else {
+          console.warn('⚠️  Blockchain node still not available after ' + maxRetries + ' attempts');
+          console.warn('   Blockchain features disabled. Start Hardhat node with: cd smart-contracts && npx hardhat node');
+          return;
+        }
+      }
+
+      // Only create provider if node is available
+      if (!nodeAvailable) {
+        return;
+      }
+
+      // If we're retrying and successfully connected, log success
+      if (retryCount > 0) {
+        console.log('✅ Blockchain node is now available! Reconnecting...');
+      }
+
+      try {
+        // Validate private key format and create provider
+        // Error suppression is handled globally in server.js
         this.provider = new ethers.JsonRpcProvider(rpcUrl);
         this.wallet = new ethers.Wallet(privateKey, this.provider);
       } catch (walletError) {

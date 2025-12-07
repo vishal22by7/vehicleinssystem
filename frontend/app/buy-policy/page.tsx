@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import Tooltip from '@/components/Tooltip';
 import { calculatorAPI, policyAPI } from '@/lib/api';
 
 interface FormData {
@@ -98,7 +99,7 @@ const initialFormData: FormData = {
   policyTypeId: '',
   coverType: '',
   registrationNumber: '',
-  registrationDate: '',
+  registrationDate: new Date().toISOString().split('T')[0], // Set to today's date by default
   rtoState: '',
   rtoCity: '',
   make: '',
@@ -202,6 +203,7 @@ export default function BuyPolicyPage() {
   const [premium, setPremium] = useState<number | null>(null);
   const [premiumBreakdown, setPremiumBreakdown] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [calculatingPremium, setCalculatingPremium] = useState(false);
   const [policyTypes, setPolicyTypes] = useState<any[]>([]);
 
   useEffect(() => {
@@ -209,10 +211,23 @@ export default function BuyPolicyPage() {
   }, []);
 
   useEffect(() => {
-    if (currentStep >= 6 && formData.vehicleCategory && formData.policyTypeId) {
-      calculatePremium();
+    // Calculate premium when reaching the summary step (step 9, index 8)
+    if (currentStep === 8) {
+      // Check if we have all required fields
+      if (formData.vehicleCategory && formData.policyTypeId && formData.engineCapacity && formData.yearOfManufacture) {
+        // Only calculate if we don't already have premium data or if premium is 0 (error case)
+        if (premium === null || premium === 0 || !premiumBreakdown) {
+          calculatePremium();
+        }
+      } else {
+        // Show error if we're on the summary step but missing data
+        if (premium === null) {
+          toast.error('Please complete all required fields to calculate premium');
+        }
+      }
     }
-  }, [currentStep, formData.vehicleCategory, formData.policyTypeId, formData.addOns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, formData.vehicleCategory, formData.policyTypeId, formData.engineCapacity, formData.yearOfManufacture]);
 
   const fetchPolicyTypes = async () => {
     try {
@@ -230,22 +245,64 @@ export default function BuyPolicyPage() {
       return;
     }
 
+    setCalculatingPremium(true);
     try {
-      const res = await calculatorAPI.calculatePremium({
-        vehicleCategory: formData.vehicleCategory,
-        policyType: formData.policyType, // Use the name for premium calculation
-        engineCapacity: parseFloat(formData.engineCapacity),
-        yearOfManufacture: parseInt(formData.yearOfManufacture),
-        previousNCB: parseFloat(formData.previousNCB),
-        addOns: formData.addOns,
-      });
+      // Get the selected policy type to get its name
+      const selectedPolicyType = policyTypes.find(pt => (pt.id || pt._id) === formData.policyTypeId);
+      const policyTypeName = selectedPolicyType?.name || formData.policyType;
 
-      if (res.data.success) {
+      // Convert addOns array to format expected by backend (array of addOn IDs/names)
+      const addOnsArray = Array.isArray(formData.addOns) ? formData.addOns : [];
+
+      // Ensure registration date is set to today for premium calculation
+      const todayDate = new Date().toISOString().split('T')[0];
+      const registrationDateForCalc = formData.registrationDate || todayDate;
+
+      // Use the policy type name from the selected policy type, not formData.policyType
+      const requestData = {
+        vehicleCategory: formData.vehicleCategory,
+        policyType: policyTypeName || formData.policyType || 'Comprehensive', // Use policyTypeName first
+        engineCapacity: parseFloat(formData.engineCapacity) || 0,
+        yearOfManufacture: parseInt(formData.yearOfManufacture) || new Date().getFullYear(),
+        registrationDate: registrationDateForCalc,
+        exShowroomPrice: parseFloat((formData as any).exShowroomPrice) || 500000, // Try to get from formData, fallback to 500000
+        previousNCB: parseFloat(formData.previousNCB) || 0,
+        addOns: addOnsArray,
+        vehicleType: formData.make || 'Car'
+      };
+
+      // Validate that we have a valid policy type name
+      if (!policyTypeName && !formData.policyType) {
+        throw new Error('Policy type is required for premium calculation');
+      }
+
+      const res = await calculatorAPI.calculatePremium(requestData);
+
+      if (res.data && res.data.success) {
         setPremium(res.data.calculation.finalPremium);
         setPremiumBreakdown(res.data.calculation);
+      } else {
+        throw new Error(res.data?.message || 'Failed to calculate premium');
       }
-    } catch (error) {
-      console.error('Premium calculation error:', error);
+    } catch (error: any) {
+      // Only log errors in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Premium calculation error:', error.response?.data || error.message);
+      }
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to calculate premium. Please check your inputs.';
+      toast.error(errorMessage);
+      // Don't set premium to 0 on error - keep it as null so user can retry
+      // Only set to 0 if the API explicitly returns 0
+      if (error.response?.data?.calculation?.finalPremium === 0) {
+        setPremium(0);
+        setPremiumBreakdown(error.response.data.calculation);
+      } else {
+        // Keep premium as null so the "Retry Calculation" button shows
+        setPremium(null);
+        setPremiumBreakdown(null);
+      }
+    } finally {
+      setCalculatingPremium(false);
     }
   };
 
@@ -314,7 +371,8 @@ export default function BuyPolicyPage() {
       case 0:
         return !!(formData.vehicleCategory && formData.policyTypeId && formData.coverType);
       case 1:
-        return !!(formData.registrationNumber && formData.registrationDate && formData.make && 
+        // registrationDate is auto-set to today, so we don't need to validate it
+        return !!(formData.registrationNumber && formData.make && 
                   formData.model && formData.fuelType && formData.engineCapacity && 
                   formData.yearOfManufacture && formData.chassisNumber && formData.seatingCapacity);
       case 2:
@@ -355,10 +413,17 @@ export default function BuyPolicyPage() {
 
   const handleProceedToPayment = async () => {
     try {
+      // Ensure registration date is set to today (in case it wasn't initialized)
+      const todayDate = new Date().toISOString().split('T')[0];
+      const formDataWithToday = {
+        ...formData,
+        registrationDate: formData.registrationDate || todayDate
+      };
+
       // Store form data in sessionStorage for payment page
       // Note: Files can't be stored in sessionStorage, so we'll handle them separately
       const formDataToStore: any = {
-        ...formData,
+        ...formDataWithToday,
         premium,
         premiumBreakdown,
         startDate: new Date().toISOString(),
@@ -385,15 +450,39 @@ export default function BuyPolicyPage() {
 
       sessionStorage.setItem('policyFormData', JSON.stringify(formDataToStore));
       
+      // Validate RC document before proceeding
+      if (!formData.rcDocument) {
+        toast.error('RC Document is required. Please upload your RC document before proceeding.');
+        return;
+      }
+      
       // Store files in a temporary object that will be accessed during payment
-      (window as any).__policyFiles = {
-        rcDocument: formData.rcDocument,
-        salesInvoice: formData.salesInvoice,
-        previousPolicyCopy: formData.previousPolicyCopy,
-        puc: formData.puc,
-        dl: formData.dl,
-        vehiclePhotos: formData.vehiclePhotos
-      };
+      // Ensure all files are valid File objects
+      const filesToStore: any = {};
+      if (formData.rcDocument instanceof File) {
+        filesToStore.rcDocument = formData.rcDocument;
+      } else {
+        toast.error('RC Document is invalid. Please upload your RC document again.');
+        return;
+      }
+      
+      if (formData.salesInvoice instanceof File) {
+        filesToStore.salesInvoice = formData.salesInvoice;
+      }
+      if (formData.previousPolicyCopy instanceof File) {
+        filesToStore.previousPolicyCopy = formData.previousPolicyCopy;
+      }
+      if (formData.puc instanceof File) {
+        filesToStore.puc = formData.puc;
+      }
+      if (formData.dl instanceof File) {
+        filesToStore.dl = formData.dl;
+      }
+      if (Array.isArray(formData.vehiclePhotos) && formData.vehiclePhotos.length > 0) {
+        filesToStore.vehiclePhotos = formData.vehiclePhotos.filter((f: any) => f instanceof File);
+      }
+      
+      (window as any).__policyFiles = filesToStore;
 
       router.push('/payment');
     } catch (error) {
@@ -553,9 +642,11 @@ export default function BuyPolicyPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Registration Number *
-                      </label>
+                      <Tooltip text="Vehicle registration number from your RC. Format: State code + 2 digits + letters + 4 digits (e.g., MH12AB1234)">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Registration Number *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="registrationNumber"
@@ -568,24 +659,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Registration Date *
-                      </label>
-                      <input
-                        type="date"
-                        name="registrationDate"
-                        value={formData.registrationDate}
-                        onChange={handleChange}
-                        required
-                        max={new Date().toISOString().split('T')[0]}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        RTO State *
-                      </label>
+                      <Tooltip text="State where your vehicle is registered. This should match the state code in your registration number (e.g., MH for Maharashtra).">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          RTO State *
+                        </label>
+                      </Tooltip>
                       <select
                         name="rtoState"
                         value={formData.rtoState}
@@ -601,9 +679,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        RTO City *
-                      </label>
+                      <Tooltip text="City where your vehicle is registered with the Regional Transport Office (RTO).">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          RTO City *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="rtoCity"
@@ -615,9 +695,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Make (Brand) *
-                      </label>
+                      <Tooltip text="Vehicle manufacturer or brand name (e.g., Maruti Suzuki, Honda, Hyundai, Tata, Mahindra).">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Make (Brand) *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="make"
@@ -630,9 +712,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Model *
-                      </label>
+                      <Tooltip text="Vehicle model name (e.g., Swift, City, i20, Nexon). This is the specific model from the manufacturer.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Model *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="model"
@@ -644,9 +728,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Variant *
-                      </label>
+                      <Tooltip text="Specific variant or trim level of your vehicle (e.g., VDI, ZXI, VX, LDI). Found on your invoice or RC.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Variant *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="variant"
@@ -658,9 +744,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Fuel Type *
-                      </label>
+                      <Tooltip text="Type of fuel your vehicle uses. Select the primary fuel type (Petrol, Diesel, CNG, Electric, or Hybrid).">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Fuel Type *
+                        </label>
+                      </Tooltip>
                       <select
                         name="fuelType"
                         value={formData.fuelType}
@@ -678,9 +766,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Engine Capacity (CC) *
-                      </label>
+                      <Tooltip text="Engine displacement in cubic centimeters (CC). For 2-wheelers: typically 100-350cc. For cars: typically 1000-3000cc. Found on your RC or invoice. Used to calculate third-party premium.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Engine Capacity (CC) *
+                        </label>
+                      </Tooltip>
                       <input
                         type="number"
                         name="engineCapacity"
@@ -694,9 +784,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Year of Manufacture *
-                      </label>
+                      <Tooltip text="Year when the vehicle was manufactured (not registration year). Usually found on the vehicle's invoice or RC. Used to calculate vehicle age and depreciation.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Year of Manufacture *
+                        </label>
+                      </Tooltip>
                       <input
                         type="number"
                         name="yearOfManufacture"
@@ -710,9 +802,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Chassis Number (VIN) *
-                      </label>
+                      <Tooltip text="17-character Vehicle Identification Number (VIN) or Chassis Number. Found on your RC, invoice, or engine bay. Format: Letters and numbers only (no I, O, Q to avoid confusion).">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Chassis Number (VIN) *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="chassisNumber"
@@ -733,9 +827,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Seating Capacity *
-                      </label>
+                      <Tooltip text="Total number of seats including driver. For 2-wheelers: usually 2. For cars: typically 4-7. Found on your RC.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Seating Capacity *
+                        </label>
+                      </Tooltip>
                       <input
                         type="number"
                         name="seatingCapacity"
@@ -748,9 +844,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Engine Number
-                      </label>
+                      <Tooltip text="Engine number engraved on your vehicle's engine block. Usually found on the engine or in your RC. Optional but recommended for verification.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Engine Number
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="engineNumber"
@@ -796,9 +894,11 @@ export default function BuyPolicyPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Previous Insurer
-                      </label>
+                      <Tooltip text="Name of your previous insurance company (e.g., HDFC Ergo, ICICI Lombard, Bajaj Allianz). Optional if this is your first policy.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Previous Insurer
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="previousInsurer"
@@ -809,9 +909,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Previous Policy Number
-                      </label>
+                      <Tooltip text="Policy number from your previous insurance policy. Found on your old policy document. Optional if this is your first policy.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Previous Policy Number
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="previousPolicyNumber"
@@ -822,9 +924,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Previous Expiry Date
-                      </label>
+                      <Tooltip text="Expiry date of your previous insurance policy. Used to calculate break in insurance period. Optional if this is your first policy.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Previous Expiry Date
+                        </label>
+                      </Tooltip>
                       <input
                         type="date"
                         name="previousExpiryDate"
@@ -835,9 +939,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Previous NCB (%)
-                      </label>
+                      <Tooltip text="No Claim Bonus (NCB) percentage from your previous policy. NCB gives discount on premium: 0% (no claims), 20% (1 year), 25% (2 years), 35% (3 years), 45% (4 years), 50% (5+ years). Select 0% if this is your first policy.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Previous NCB (%)
+                        </label>
+                      </Tooltip>
                       <select
                         name="previousNCB"
                         value={formData.previousNCB}
@@ -854,9 +960,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Break in Insurance (days)
-                      </label>
+                      <Tooltip text="Number of days between expiry of previous policy and start of new policy. If you renewed immediately, enter 0. Used to determine if NCB is applicable.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          Break in Insurance (days)
+                        </label>
+                      </Tooltip>
                       <input
                         type="number"
                         name="breakInInsurance"
@@ -950,9 +1058,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        PAN Number *
-                      </label>
+                      <Tooltip text="Permanent Account Number (PAN) issued by Income Tax Department. Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F). Required for insurance policies above ₹50,000.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          PAN Number *
+                        </label>
+                      </Tooltip>
                       <input
                         type="text"
                         name="pan"
@@ -970,9 +1080,11 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        KYC ID Type
-                      </label>
+                      <Tooltip text="Type of identity document for KYC verification. Select Aadhaar, Driving License, Passport, or Voter ID. Optional but recommended.">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
+                          KYC ID Type
+                        </label>
+                      </Tooltip>
                       <select
                         name="kycIdType"
                         value={formData.kycIdType}
@@ -1412,40 +1524,45 @@ export default function BuyPolicyPage() {
                 <div className="space-y-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Premium Summary & Payment</h2>
                   
-                  {premium && premiumBreakdown ? (
+                  {calculatingPremium ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600 dark:text-gray-400">Calculating premium...</p>
+                    </div>
+                  ) : premium !== null && premium !== undefined && premiumBreakdown ? (
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
                       <div className="space-y-3">
-                        {premiumBreakdown.basePremium && (
+                        {premiumBreakdown.basePremium !== undefined && premiumBreakdown.basePremium > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700 dark:text-gray-300">Base Premium</span>
                             <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(premiumBreakdown.basePremium)}</span>
                           </div>
                         )}
-                        {premiumBreakdown.tpPremium && (
+                        {premiumBreakdown.tpPremium !== undefined && premiumBreakdown.tpPremium > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700 dark:text-gray-300">Third-Party Premium</span>
                             <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(premiumBreakdown.tpPremium)}</span>
                           </div>
                         )}
-                        {premiumBreakdown.odPremium && (
+                        {premiumBreakdown.odPremium !== undefined && premiumBreakdown.odPremium > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700 dark:text-gray-300">Own Damage Premium</span>
                             <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(premiumBreakdown.odPremium)}</span>
                           </div>
                         )}
-                        {premiumBreakdown.addOnsPremium && premiumBreakdown.addOnsPremium > 0 && (
+                        {premiumBreakdown.addOnsPremium !== undefined && premiumBreakdown.addOnsPremium > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700 dark:text-gray-300">Add-ons</span>
                             <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(premiumBreakdown.addOnsPremium)}</span>
                           </div>
                         )}
-                        {premiumBreakdown.ncbDiscount && premiumBreakdown.ncbDiscount > 0 && (
+                        {premiumBreakdown.ncbDiscount !== undefined && premiumBreakdown.ncbDiscount > 0 && (
                           <div className="flex justify-between text-green-600 dark:text-green-400">
                             <span>NCB Discount</span>
                             <span className="font-medium">-{formatCurrency(premiumBreakdown.ncbDiscount)}</span>
                           </div>
                         )}
-                        {premiumBreakdown.gst && (
+                        {premiumBreakdown.gst !== undefined && premiumBreakdown.gst > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700 dark:text-gray-300">GST (18%)</span>
                             <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(premiumBreakdown.gst)}</span>
@@ -1454,14 +1571,20 @@ export default function BuyPolicyPage() {
                         <div className="border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
                           <div className="flex justify-between text-xl font-bold">
                             <span className="text-gray-900 dark:text-white">Total Premium</span>
-                            <span className="text-blue-600 dark:text-blue-400">{formatCurrency(premium)}</span>
+                            <span className="text-blue-600 dark:text-blue-400">{formatCurrency(premium || 0)}</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="text-center py-8">
-                      <p className="text-gray-600 dark:text-gray-400">Calculating premium...</p>
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">Unable to calculate premium.</p>
+                      <button
+                        onClick={calculatePremium}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      >
+                        Retry Calculation
+                      </button>
                     </div>
                   )}
 

@@ -9,7 +9,8 @@ import { policyAPI } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 interface Policy {
-  _id: string;
+  id?: string;  // Sequelize uses 'id'
+  _id?: string; // Fallback for compatibility
   vehicleBrand: string;
   vehicleModel: string;
   registrationNumber: string;
@@ -18,7 +19,10 @@ interface Policy {
   endDate: string;
   status: string;
   proposalNumber?: string;
-  policyTypeId: {
+  policyTypeId?: {
+    name: string;
+  };
+  policyTypeRef?: {
     name: string;
   };
 }
@@ -45,7 +49,14 @@ export default function PoliciesPage() {
     try {
       const res = await policyAPI.getAll();
       if (res.data.success) {
-        setPolicies(res.data.policies);
+        // Normalize data to ensure both 'id' and '_id' are available
+        const policies = res.data.policies.map((p: any) => ({
+          ...p,
+          id: p.id || p._id,
+          _id: p._id || p.id,
+          policyTypeId: p.policyTypeId || p.policyTypeRef || { name: 'N/A' }
+        }));
+        setPolicies(policies);
       }
     } catch (error) {
       toast.error('Failed to load policies');
@@ -55,6 +66,11 @@ export default function PoliciesPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!id) {
+      toast.error('Invalid policy ID');
+      return;
+    }
+    
     if (!confirm('Are you sure you want to delete this policy?')) {
       return;
     }
@@ -182,13 +198,15 @@ export default function PoliciesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPolicies.map((policy) => {
+              const policyId = policy.id || policy._id;
               const endDate = new Date(policy.endDate);
               const isExpired = endDate < new Date();
               const daysRemaining = Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+              const policyTypeName = policy.policyTypeId?.name || policy.policyTypeRef?.name || 'N/A';
 
               return (
                 <div
-                  key={policy._id}
+                  key={policyId}
                   className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow"
                 >
                   <div className="flex justify-between items-start mb-4">
@@ -207,7 +225,7 @@ export default function PoliciesPage() {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600 dark:text-gray-400">Policy Type:</span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {policy.policyTypeId?.name || 'N/A'}
+                        {policyTypeName}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -231,14 +249,14 @@ export default function PoliciesPage() {
 
                   <div className="flex gap-2 mt-6">
                     <Link
-                      href={`/policies/${policy._id}`}
+                      href={`/policies/${policyId}`}
                       className="flex-1 text-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
                     >
                       View Details
                     </Link>
                     {!isExpired && (
                       <button
-                        onClick={() => handleDelete(policy._id)}
+                        onClick={() => handleDelete(policyId || '')}
                         className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm"
                       >
                         Delete

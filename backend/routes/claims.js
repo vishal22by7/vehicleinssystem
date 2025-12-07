@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const { body, validationResult } = require('express-validator');
-const { Claim, ClaimPhoto, Policy, BlockchainRecord } = require('../models/sequelize');
+const { Claim, ClaimPhoto, Policy, PolicyType, BlockchainRecord } = require('../models/sequelize');
 const { auth } = require('../middleware/auth');
 const blockchainService = require('../services/blockchain');
 const ipfsService = require('../services/ipfs');
@@ -22,7 +22,7 @@ const router = express.Router();
 
 // Configure multer for file uploads
 const upload = multer({
-  dest: 'uploads/',
+  dest: uploadsDir, // Use absolute path
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB
   },
@@ -48,8 +48,14 @@ router.get('/', auth, async (req, res) => {
         { 
           model: Policy, 
           as: 'policy',
-          attributes: ['policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel'],
-          include: [{ model: PolicyType, as: 'policyTypeRef', attributes: ['name'] }]
+          attributes: ['id', 'policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'registrationNumber'],
+          required: false, // Left join - allow claims without policies
+          include: [{ 
+            model: PolicyType, 
+            as: 'policyTypeRef', 
+            attributes: ['id', 'name'],
+            required: false // Left join - allow policies without policy types
+          }]
         }
       ],
       order: [['submittedAt', 'DESC']]
@@ -72,7 +78,13 @@ router.get('/', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Get claims error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Error details:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -82,7 +94,17 @@ router.get('/:id', auth, async (req, res) => {
     const { User } = require('../models/sequelize');
     const claim = await Claim.findByPk(req.params.id, {
       include: [
-        { model: Policy, as: 'policy' },
+        { 
+          model: Policy, 
+          as: 'policy',
+          attributes: ['id', 'policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'registrationNumber'],
+          include: [{
+            model: PolicyType,
+            as: 'policyTypeRef',
+            attributes: ['id', 'name', 'description'],
+            required: false
+          }]
+        },
         { model: User, as: 'user', attributes: ['name', 'email'] }
       ]
     });
@@ -180,6 +202,21 @@ router.post('/submit', auth, upload.array('photos', 5), [
 
     const { policyId, description } = req.body;
 
+    // Validate required fields
+    if (!policyId) {
+      return res.status(400).json({ success: false, message: 'Policy ID is required' });
+    }
+    if (!description || (typeof description === 'string' && description.trim().length === 0)) {
+      return res.status(400).json({ success: false, message: 'Description is required' });
+    }
+
+    console.log('📋 Claim submission request:', {
+      policyId,
+      descriptionLength: description ? description.length : 0,
+      filesCount: req.files ? req.files.length : 0,
+      userId: req.user.id
+    });
+
     // Verify policy exists and belongs to user
     const policy = await Policy.findByPk(policyId);
     if (!policy) {
@@ -191,12 +228,30 @@ router.post('/submit', auth, upload.array('photos', 5), [
     }
 
     // Create claim
-    const claim = await Claim.create({
-      policyId,
-      userId: req.user.id,
-      description,
-      status: 'Submitted'
+    console.log('📝 Creating claim with:', { 
+      policyId, 
+      userId: req.user.id, 
+      description: description ? (description.length > 50 ? description.substring(0, 50) + '...' : description) : 'N/A',
+      filesCount: req.files ? req.files.length : 0
     });
+    let claim;
+    try {
+      claim = await Claim.create({
+        policyId,
+        userId: req.user.id,
+        description: description || '',
+        status: 'Submitted'
+      });
+      console.log('✅ Claim created successfully:', claim.id);
+    } catch (createError) {
+      console.error('❌ Failed to create claim:', createError);
+      console.error('❌ Create error details:', {
+        message: createError.message,
+        name: createError.name,
+        errors: createError.errors
+      });
+      throw createError;
+    }
 
     // Step 1: Upload photos to IPFS AND keep local copy
     const photos = [];
@@ -211,24 +266,37 @@ router.post('/submit', auth, upload.array('photos', 5), [
           let ipfsCid = null;
           let ipfsUrl = null;
           
-          if (ipfsService.isAvailable && ipfsService.isAvailable()) {
-            const ipfsResult = await ipfsService.uploadFile(file.path, file.originalname);
-            
-            if (ipfsResult) {
-              ipfsCid = ipfsResult.cid;
-              ipfsUrl = ipfsResult.url;
-              evidenceCids.push(ipfsCid);
-              console.log(`✅ Photo uploaded to IPFS: ${ipfsCid}`);
+          if (ipfsService.isAvailable()) {
+            try {
+              const ipfsResult = await ipfsService.uploadFile(file.path, file.originalname);
               
-              // Store first photo CID for ML analysis
-              if (!firstPhotoCID) {
-                firstPhotoCID = ipfsCid;
+              if (ipfsResult) {
+                // Handle both object and string return types
+                if (typeof ipfsResult === 'string') {
+                  ipfsCid = ipfsResult;
+                  ipfsUrl = ipfsService.getGatewayUrl ? ipfsService.getGatewayUrl(ipfsResult) : null;
+                } else if (ipfsResult.cid) {
+                  ipfsCid = ipfsResult.cid;
+                  ipfsUrl = ipfsResult.url || (ipfsService.getGatewayUrl ? ipfsService.getGatewayUrl(ipfsResult.cid) : null);
+                } else {
+                  ipfsCid = ipfsResult;
+                  ipfsUrl = null;
+                }
+                
+                if (ipfsCid) {
+                  evidenceCids.push(ipfsCid);
+                  console.log(`✅ Photo uploaded to IPFS: ${ipfsCid}`);
+                  
+                  // Store first photo CID for ML analysis
+                  if (!firstPhotoCID) {
+                    firstPhotoCID = ipfsCid;
+                  }
+                }
+              } else {
+                console.warn('⚠️  IPFS upload returned null, continuing with local storage');
               }
-
-              // Record IPFS file (optional - can be added later if needed)
-              // Note: IPFSFile model not yet migrated to Sequelize
-            } else {
-              console.warn('⚠️  IPFS upload failed, continuing with local storage');
+            } catch (ipfsError) {
+              console.warn('⚠️  IPFS upload error, continuing with local storage:', ipfsError.message);
             }
           } else {
             console.warn('⚠️  IPFS not available, using local storage only');
@@ -236,6 +304,17 @@ router.post('/submit', auth, upload.array('photos', 5), [
 
           // Step 1b: Save local copy (move from temp to permanent location)
           const permanentPath = path.join(uploadsDir, `${claim.id}_${file.filename}`);
+          
+          // Ensure uploads directory exists
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          
+          // Check if source file exists before copying
+          if (!fs.existsSync(file.path)) {
+            throw new Error(`Source file not found: ${file.path}`);
+          }
+          
           fs.copyFileSync(file.path, permanentPath);
           console.log(`💾 Saved photo to permanent location: ${permanentPath}`);
           
@@ -277,13 +356,15 @@ router.post('/submit', auth, upload.array('photos', 5), [
     }
 
     // Step 2: ML Analysis - Send image directly to Gemini (bypass IPFS)
+    // Wrap entire ML section in try-catch to prevent crashes
     let mlReport = null;
-    console.log(`\n🔍 ML Analysis Check:`);
-    console.log(`   firstPhotoPath: ${firstPhotoPath}`);
-    console.log(`   firstPhotoPath exists: ${firstPhotoPath ? fs.existsSync(firstPhotoPath) : 'N/A'}`);
-    console.log(`   ML_ANALYZER_URL: ${ML_ANALYZER_URL}`);
-    
-    if (firstPhotoPath && fs.existsSync(firstPhotoPath)) {
+    try {
+      console.log(`\n🔍 ML Analysis Check:`);
+      console.log(`   firstPhotoPath: ${firstPhotoPath}`);
+      console.log(`   firstPhotoPath exists: ${firstPhotoPath ? fs.existsSync(firstPhotoPath) : 'N/A'}`);
+      console.log(`   ML_ANALYZER_URL: ${ML_ANALYZER_URL}`);
+      
+      if (firstPhotoPath && fs.existsSync(firstPhotoPath)) {
       try {
         console.log(`\n🔍 Sending image directly to Gemini for analysis:`);
         console.log(`   File path: ${firstPhotoPath}`);
@@ -350,15 +431,27 @@ router.post('/submit', auth, upload.array('photos', 5), [
           // Continue without ML analysis for other errors
         }
       }
-    } else {
-      console.warn(`\n⚠️  ML Analysis skipped:`);
-      console.warn(`   Reason: ${!firstPhotoPath ? 'No photo path set' : 'Photo file does not exist'}`);
-      if (firstPhotoPath) {
-        console.warn(`   Expected path: ${firstPhotoPath}`);
+      } else {
+        console.warn(`\n⚠️  ML Analysis skipped:`);
+        console.warn(`   Reason: ${!firstPhotoPath ? 'No photo path set' : 'Photo file does not exist'}`);
+        if (firstPhotoPath) {
+          console.warn(`   Expected path: ${firstPhotoPath}`);
+        }
       }
-    }
 
-    await claim.save();
+      // Save claim with any ML updates (wrap in try-catch to prevent crashes)
+      try {
+        await claim.save();
+      } catch (saveError) {
+        console.error('❌ Error saving claim after ML analysis:', saveError.message);
+        console.error('   Save error details:', saveError);
+        // Continue - claim was already created, this is just updating ML fields
+      }
+    } catch (mlSectionError) {
+      console.error('❌ ML Analysis section error (non-fatal):', mlSectionError.message);
+      console.error('   Full error:', mlSectionError);
+      // Continue with claim submission even if ML analysis fails completely
+    }
 
     // Step 3: Write to blockchain (enhanced contract with ML data)
     let blockchainResult = null;
@@ -400,6 +493,13 @@ router.post('/submit', auth, upload.array('photos', 5), [
       }
     }
 
+    // Refresh claim to get latest data (wrap in try-catch)
+    try {
+      await claim.reload();
+    } catch (reloadError) {
+      console.warn('⚠️  Could not reload claim, using current data:', reloadError.message);
+    }
+    
     res.status(201).json({
       success: true,
       message: 'Claim submitted successfully',
@@ -408,26 +508,36 @@ router.post('/submit', auth, upload.array('photos', 5), [
         photos
       },
       mlAnalysis: mlReport ? {
-        severity: mlReport.severity,
-        damageParts: mlReport.damage_parts,
-        confidence: mlReport.confidence,
-        mlReportCID: mlReport.mlReportCID
+        severity: mlReport.severity || 0,
+        damageParts: mlReport.damage_parts || [],
+        confidence: mlReport.confidence || 0,
+        mlReportCID: mlReport.mlReportCID || null
       } : null,
       blockchain: blockchainResult
     });
   } catch (error) {
     console.error('Submit claim error:', error);
+    console.error('Error stack:', error.stack);
     
     // Clean up uploaded files on error
     if (req.files) {
       req.files.forEach(file => {
         if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
+          try {
+            fs.unlinkSync(file.path);
+          } catch (unlinkError) {
+            console.error('Error cleaning up file:', unlinkError);
+          }
         }
       });
     }
 
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

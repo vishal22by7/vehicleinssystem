@@ -15,7 +15,17 @@ api.interceptors.request.use(
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token');
       if (token) {
+        // Ensure headers object exists
+        if (!config.headers) {
+          config.headers = {};
+        }
+        // Always set Authorization header
         config.headers.Authorization = `Bearer ${token}`;
+        
+        // If sending FormData, remove Content-Type so axios can set it with boundary
+        if (config.data instanceof FormData) {
+          delete config.headers['Content-Type'];
+        }
       }
     }
     return config;
@@ -68,9 +78,19 @@ export const policyAPI = {
 export const claimAPI = {
   getAll: () => api.get('/claims'),
   getById: (id: string) => api.get(`/claims/${id}`),
-  submit: (formData: FormData) => api.post('/claims/submit', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  submit: (formData: FormData) => {
+    // Get token to verify it exists
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    
+    if (!token) {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
+    // Don't pass any headers - let the interceptor handle it
+    // Axios will automatically set Content-Type for FormData with boundary
+    // The interceptor will add Authorization header
+    return api.post('/claims/submit', formData);
+  },
   delete: (id: string) => api.delete(`/claims/${id}`),
   getMLReport: (id: string) => api.get(`/claims/${id}/ml-report`),
 };
