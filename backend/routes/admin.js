@@ -225,9 +225,18 @@ router.get('/policies', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    // Map yearOfManufacture to yearOfRegistration for frontend compatibility
+    const mappedPolicies = policies.map(policy => {
+      const policyData = policy.toJSON();
+      if (!policyData.yearOfRegistration && policyData.yearOfManufacture) {
+        policyData.yearOfRegistration = policyData.yearOfManufacture;
+      }
+      return policyData;
+    });
+
     res.json({
       success: true,
-      policies
+      policies: mappedPolicies
     });
   } catch (error) {
     console.error('Get policies error:', error);
@@ -249,7 +258,7 @@ router.get('/claims', async (req, res) => {
         { 
           model: Policy, 
           as: 'policy',
-          attributes: ['id', 'policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'yearOfManufacture'],
+          attributes: ['id', 'policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'yearOfRegistration'],
           required: false,  // Left join - allow claims without policies
           include: [{ 
             model: PolicyType, 

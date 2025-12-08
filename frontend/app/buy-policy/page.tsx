@@ -24,7 +24,7 @@ interface FormData {
   variant: string;
   fuelType: string;
   engineCapacity: string;
-  yearOfManufacture: string;
+  yearOfRegistration: string;
   engineNumber: string;
   chassisNumber: string;
   seatingCapacity: string;
@@ -107,7 +107,7 @@ const initialFormData: FormData = {
   variant: '',
   fuelType: '',
   engineCapacity: '',
-  yearOfManufacture: new Date().getFullYear().toString(),
+  yearOfRegistration: new Date().getFullYear().toString(),
   engineNumber: '',
   chassisNumber: '',
   seatingCapacity: '',
@@ -214,20 +214,21 @@ export default function BuyPolicyPage() {
     // Calculate premium when reaching the summary step (step 9, index 8)
     if (currentStep === 8) {
       // Check if we have all required fields
-      if (formData.vehicleCategory && formData.policyTypeId && formData.engineCapacity && formData.yearOfManufacture) {
-        // Only calculate if we don't already have premium data or if premium is 0 (error case)
-        if (premium === null || premium === 0 || !premiumBreakdown) {
-      calculatePremium();
-    }
+      if (formData.vehicleCategory && formData.policyTypeId && formData.engineCapacity && formData.yearOfRegistration) {
+        // Always recalculate if premium is null, 0, or breakdown is missing
+        if (premium === null || premium === 0 || !premiumBreakdown || (premiumBreakdown && premiumBreakdown.finalPremium === 0)) {
+          console.log('🔄 Recalculating premium on summary step...');
+          calculatePremium();
+        }
       } else {
         // Show error if we're on the summary step but missing data
-        if (premium === null) {
+        if (premium === null || premium === 0) {
           toast.error('Please complete all required fields to calculate premium');
         }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, formData.vehicleCategory, formData.policyTypeId, formData.engineCapacity, formData.yearOfManufacture]);
+  }, [currentStep, formData.vehicleCategory, formData.policyTypeId, formData.engineCapacity, formData.yearOfRegistration]);
 
   const fetchPolicyTypes = async () => {
     try {
@@ -250,6 +251,16 @@ export default function BuyPolicyPage() {
       // Get the selected policy type to get its name
       const selectedPolicyType = policyTypes.find(pt => (pt.id || pt._id) === formData.policyTypeId);
       const policyTypeName = selectedPolicyType?.name || formData.policyType;
+      
+      if (!selectedPolicyType) {
+        console.error('Policy type not found for ID:', formData.policyTypeId);
+        throw new Error('Selected policy type not found. Please select a policy type again.');
+      }
+      
+      if (!policyTypeName || policyTypeName.trim() === '') {
+        console.error('Policy type name is empty:', { selectedPolicyType, formData });
+        throw new Error('Policy type name is required for premium calculation');
+      }
 
       // Convert addOns array to format expected by backend (array of addOn IDs/names)
       const addOnsArray = Array.isArray(formData.addOns) ? formData.addOns : [];
@@ -259,28 +270,54 @@ export default function BuyPolicyPage() {
       const registrationDateForCalc = formData.registrationDate || todayDate;
 
       // Use the policy type name from the selected policy type, not formData.policyType
+      // Default exShowroomPrice based on vehicle category if not provided
+      const defaultExShowroomPrice = formData.vehicleCategory === '2W' ? 100000 : 500000;
+      const exShowroomPrice = parseFloat((formData as any).exShowroomPrice) || defaultExShowroomPrice;
+      
       const requestData = {
         vehicleCategory: formData.vehicleCategory,
-        policyType: policyTypeName || formData.policyType || 'Comprehensive', // Use policyTypeName first
+        policyType: policyTypeName, // Always use the policy type name from database
         engineCapacity: parseFloat(formData.engineCapacity) || 0,
-        yearOfManufacture: parseInt(formData.yearOfManufacture) || new Date().getFullYear(),
+        yearOfRegistration: parseInt(formData.yearOfRegistration) || new Date().getFullYear(),
         registrationDate: registrationDateForCalc,
-        exShowroomPrice: parseFloat((formData as any).exShowroomPrice) || 500000, // Try to get from formData, fallback to 500000
+        exShowroomPrice: exShowroomPrice,
         previousNCB: parseFloat(formData.previousNCB) || 0,
         addOns: addOnsArray,
         vehicleType: formData.make || 'Car'
       };
-
-      // Validate that we have a valid policy type name
-      if (!policyTypeName && !formData.policyType) {
-        throw new Error('Policy type is required for premium calculation');
+      
+      console.log('📤 Premium Calculation Request:', {
+        vehicleCategory: requestData.vehicleCategory,
+        policyType: requestData.policyType,
+        engineCapacity: requestData.engineCapacity,
+        exShowroomPrice: requestData.exShowroomPrice,
+        yearOfRegistration: requestData.yearOfRegistration
+      });
+      
+      // Validate required fields
+      if (!requestData.engineCapacity || requestData.engineCapacity <= 0) {
+        throw new Error('Engine capacity is required and must be greater than 0');
+      }
+      
+      if (!requestData.policyType || requestData.policyType.trim() === '') {
+        throw new Error('Policy type is required');
       }
 
       const res = await calculatorAPI.calculatePremium(requestData);
 
       if (res.data && res.data.success) {
-        setPremium(res.data.calculation.finalPremium);
-        setPremiumBreakdown(res.data.calculation);
+        const calculation = res.data.calculation;
+        const finalPremium = calculation.finalPremium || 0;
+        
+        // Validate that we got a valid premium
+        if (finalPremium <= 0) {
+          console.error('Premium calculation returned zero or negative:', calculation);
+          throw new Error('Premium calculation returned invalid result. Please check your vehicle details and try again.');
+        }
+        
+        setPremium(finalPremium);
+        setPremiumBreakdown(calculation);
+        console.log('✅ Premium calculated successfully:', finalPremium);
       } else {
         throw new Error(res.data?.message || 'Failed to calculate premium');
       }
@@ -374,7 +411,7 @@ export default function BuyPolicyPage() {
         // registrationDate is auto-set to today, so we don't need to validate it
         return !!(formData.registrationNumber && formData.make && 
                   formData.model && formData.fuelType && formData.engineCapacity && 
-                  formData.yearOfManufacture && formData.chassisNumber && formData.seatingCapacity);
+                  formData.yearOfRegistration && formData.chassisNumber && formData.seatingCapacity);
       case 2:
         return true; // Optional step
       case 3:
@@ -642,11 +679,26 @@ export default function BuyPolicyPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <Tooltip text="Vehicle registration number from your RC. Format: State code + 2 digits + letters + 4 digits (e.g., MH12AB1234)">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Registration Number *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Registration Number *</span>
+                          <Tooltip 
+                            title="Registration Number"
+                            text="Vehicle registration number from your RC. Format: State code + 2 digits + letters + 4 digits (e.g., MH12AB1234)"
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Registration Number"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="registrationNumber"
@@ -659,11 +711,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="State where your vehicle is registered. This should match the state code in your registration number (e.g., MH for Maharashtra).">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        RTO State *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>RTO State *</span>
+                          <Tooltip 
+                            title="RTO State"
+                            text="State where your vehicle is registered. This should match the state code in your registration number (e.g., MH for Maharashtra)."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about RTO State"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <select
                         name="rtoState"
                         value={formData.rtoState}
@@ -679,11 +746,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="City where your vehicle is registered with the Regional Transport Office (RTO).">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        RTO City *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>RTO City *</span>
+                          <Tooltip 
+                            title="RTO City"
+                            text="City where your vehicle is registered with the Regional Transport Office (RTO)."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about RTO City"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="rtoCity"
@@ -695,11 +777,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Vehicle manufacturer or brand name (e.g., Maruti Suzuki, Honda, Hyundai, Tata, Mahindra).">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Make (Brand) *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Make (Brand) *</span>
+                          <Tooltip 
+                            title="Make (Brand)"
+                            text="Vehicle manufacturer or brand name (e.g., Maruti Suzuki, Honda, Hyundai, Tata, Mahindra)."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Make"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="make"
@@ -712,11 +809,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Vehicle model name (e.g., Swift, City, i20, Nexon). This is the specific model from the manufacturer.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Model *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Model *</span>
+                          <Tooltip 
+                            title="Model"
+                            text="Vehicle model name (e.g., Swift, City, i20, Nexon). This is the specific model from the manufacturer."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Model"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="model"
@@ -728,11 +840,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Specific variant or trim level of your vehicle (e.g., VDI, ZXI, VX, LDI). Found on your invoice or RC.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Variant *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Variant *</span>
+                          <Tooltip 
+                            title="Variant"
+                            text="Specific variant or trim level of your vehicle (e.g., VDI, ZXI, VX, LDI). Found on your invoice or RC."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Variant"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="variant"
@@ -744,11 +871,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Type of fuel your vehicle uses. Select the primary fuel type (Petrol, Diesel, CNG, Electric, or Hybrid).">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Fuel Type *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Fuel Type *</span>
+                          <Tooltip 
+                            title="Fuel Type"
+                            text="Type of fuel your vehicle uses. Select the primary fuel type (Petrol, Diesel, CNG, Electric, or Hybrid)."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Fuel Type"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <select
                         name="fuelType"
                         value={formData.fuelType}
@@ -766,11 +908,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Engine displacement in cubic centimeters (CC). For 2-wheelers: typically 100-350cc. For cars: typically 1000-3000cc. Found on your RC or invoice. Used to calculate third-party premium.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Engine Capacity (CC) *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Engine Capacity (CC) *</span>
+                          <Tooltip 
+                            title="Engine Capacity"
+                            text="Engine displacement in cubic centimeters (CC). For 2-wheelers: typically 100-350cc. For cars: typically 1000-3000cc. Found on your RC or invoice. Used to calculate third-party premium."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Engine Capacity"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="number"
                         name="engineCapacity"
@@ -784,15 +941,30 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Year when the vehicle was manufactured (not registration year). Usually found on the vehicle's invoice or RC. Used to calculate vehicle age and depreciation.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Year of Manufacture *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Year of Registration *</span>
+                          <Tooltip 
+                            title="Year of Registration"
+                            text="Year when your vehicle was first registered with the RTO (Regional Transport Office). This is usually the same year you bought the vehicle from the showroom, but it's the official registration date shown on your RC (Registration Certificate). This year is used for all insurance calculations including vehicle age, depreciation, and IDV. For insurance purposes, vehicle age is calculated from registration date, not manufacture date."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Year of Registration"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="number"
-                        name="yearOfManufacture"
-                        value={formData.yearOfManufacture}
+                        name="yearOfRegistration"
+                        value={formData.yearOfRegistration}
                         onChange={handleChange}
                         required
                         min="1900"
@@ -802,11 +974,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="17-character Vehicle Identification Number (VIN) or Chassis Number. Found on your RC, invoice, or engine bay. Format: Letters and numbers only (no I, O, Q to avoid confusion).">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Chassis Number (VIN) *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Chassis Number (VIN) *</span>
+                          <Tooltip 
+                            title="Chassis Number (VIN)"
+                            text="17-character Vehicle Identification Number (VIN) or Chassis Number. Found on your RC, invoice, or engine bay. Format: Letters and numbers only (no I, O, Q to avoid confusion)."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Chassis Number"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="chassisNumber"
@@ -827,11 +1014,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Total number of seats including driver. For 2-wheelers: usually 2. For cars: typically 4-7. Found on your RC.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Seating Capacity *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Seating Capacity *</span>
+                          <Tooltip 
+                            title="Seating Capacity"
+                            text="Total number of seats including driver. For 2-wheelers: usually 2. For cars: typically 4-7. Found on your RC."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Seating Capacity"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="number"
                         name="seatingCapacity"
@@ -844,11 +1046,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Engine number engraved on your vehicle's engine block. Usually found on the engine or in your RC. Optional but recommended for verification.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Engine Number
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Engine Number</span>
+                          <Tooltip 
+                            title="Engine Number"
+                            text="Engine number engraved on your vehicle's engine block. Usually found on the engine or in your RC. Optional but recommended for verification."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Engine Number"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="engineNumber"
@@ -894,11 +1111,26 @@ export default function BuyPolicyPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <Tooltip text="Name of your previous insurance company (e.g., HDFC Ergo, ICICI Lombard, Bajaj Allianz). Optional if this is your first policy.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Previous Insurer
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Previous Insurer</span>
+                          <Tooltip 
+                            title="Previous Insurer"
+                            text="Name of your previous insurance company (e.g., HDFC Ergo, ICICI Lombard, Bajaj Allianz). Optional if this is your first policy."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Previous Insurer"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="previousInsurer"
@@ -909,11 +1141,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Policy number from your previous insurance policy. Found on your old policy document. Optional if this is your first policy.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Previous Policy Number
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Previous Policy Number</span>
+                          <Tooltip 
+                            title="Previous Policy Number"
+                            text="Policy number from your previous insurance policy. Found on your old policy document. Optional if this is your first policy."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Previous Policy Number"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="previousPolicyNumber"
@@ -924,11 +1171,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Expiry date of your previous insurance policy. Used to calculate break in insurance period. Optional if this is your first policy.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Previous Expiry Date
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Previous Expiry Date</span>
+                          <Tooltip 
+                            title="Previous Expiry Date"
+                            text="Expiry date of your previous insurance policy. Used to calculate break in insurance period. Optional if this is your first policy."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Previous Expiry Date"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="date"
                         name="previousExpiryDate"
@@ -939,11 +1201,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="No Claim Bonus (NCB) percentage from your previous policy. NCB gives discount on premium: 0% (no claims), 20% (1 year), 25% (2 years), 35% (3 years), 45% (4 years), 50% (5+ years). Select 0% if this is your first policy.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Previous NCB (%)
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Previous NCB (%)</span>
+                          <Tooltip 
+                            title="No Claim Bonus (NCB)"
+                            text="Percentage from your previous policy. NCB gives discount on premium: 0% (no claims), 20% (1 year), 25% (2 years), 35% (3 years), 45% (4 years), 50% (5+ years). Select 0% if this is your first policy."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about NCB"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <select
                         name="previousNCB"
                         value={formData.previousNCB}
@@ -960,11 +1237,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Number of days between expiry of previous policy and start of new policy. If you renewed immediately, enter 0. Used to determine if NCB is applicable.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        Break in Insurance (days)
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>Break in Insurance (days)</span>
+                          <Tooltip 
+                            title="Break in Insurance"
+                            text="Number of days between expiry of previous policy and start of new policy. If you renewed immediately, enter 0. Used to determine if NCB is applicable."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about Break in Insurance"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="number"
                         name="breakInInsurance"
@@ -1058,11 +1350,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Permanent Account Number (PAN) issued by Income Tax Department. Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F). Required for insurance policies above ₹50,000.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        PAN Number *
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>PAN Number *</span>
+                          <Tooltip 
+                            title="PAN Number"
+                            text="Permanent Account Number (PAN) issued by Income Tax Department. Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F). Required for insurance policies above ₹50,000."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about PAN Number"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <input
                         type="text"
                         name="pan"
@@ -1080,11 +1387,26 @@ export default function BuyPolicyPage() {
                     </div>
 
                     <div>
-                      <Tooltip text="Type of identity document for KYC verification. Select Aadhaar, Driving License, Passport, or Voter ID. Optional but recommended.">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                        KYC ID Type
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span>KYC ID Type</span>
+                          <Tooltip 
+                            title="KYC ID Type"
+                            text="Type of identity document for KYC verification. Select Aadhaar, Driving License, Passport, or Voter ID. Optional but recommended."
+                            position="right"
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              aria-label="Information about KYC ID Type"
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+                        </div>
                       </label>
-                      </Tooltip>
                       <select
                         name="kycIdType"
                         value={formData.kycIdType}
@@ -1571,7 +1893,13 @@ export default function BuyPolicyPage() {
                         <div className="border-t border-gray-200 dark:border-gray-600 pt-3 mt-3">
                           <div className="flex justify-between text-xl font-bold">
                             <span className="text-gray-900 dark:text-white">Total Premium</span>
-                            <span className="text-blue-600 dark:text-blue-400">{formatCurrency(premium || 0)}</span>
+                            <span className="text-blue-600 dark:text-blue-400">
+                              {premium && premium > 0 ? formatCurrency(premium) : (
+                                <span className="text-red-600 dark:text-red-400 text-sm font-normal">
+                                  Calculation required
+                                </span>
+                              )}
+                            </span>
                           </div>
                         </div>
                       </div>

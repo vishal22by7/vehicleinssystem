@@ -53,9 +53,19 @@ router.get('/', auth, async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    // Map yearOfManufacture to yearOfRegistration for frontend compatibility
+    const mappedPolicies = policies.map(policy => {
+      const policyData = policy.toJSON();
+      // Ensure yearOfRegistration is available (it should be from the model mapping)
+      if (!policyData.yearOfRegistration && policyData.yearOfManufacture) {
+        policyData.yearOfRegistration = policyData.yearOfManufacture;
+      }
+      return policyData;
+    });
+
     res.json({
       success: true,
-      policies
+      policies: mappedPolicies
     });
   } catch (error) {
     console.error('Get policies error:', error);
@@ -86,9 +96,15 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
+    // Map yearOfManufacture to yearOfRegistration for frontend compatibility
+    const policyData = policy.toJSON();
+    if (!policyData.yearOfRegistration && policyData.yearOfManufacture) {
+      policyData.yearOfRegistration = policyData.yearOfManufacture;
+    }
+
     res.json({
       success: true,
-      policy
+      policy: policyData
     });
   } catch (error) {
     console.error('Get policy error:', error);
@@ -210,7 +226,7 @@ router.post('/buy', auth, upload.fields([
       variant,
       fuelType,
       modelYear,
-      yearOfManufacture,
+      yearOfRegistration,
       engineCapacity,
       seatingCapacity,
       registrationNumber,
@@ -295,11 +311,11 @@ router.post('/buy', auth, upload.fields([
     // Calculate premium breakdown if not provided
     let premiumBreakdown = null;
     let calculatedIdv = null;
-    if (exShowroomPrice && yearOfManufacture && registrationDate) {
+    if (exShowroomPrice && yearOfRegistration && registrationDate) {
       const premiumCalculator = require('../services/premiumCalculator');
       calculatedIdv = premiumCalculator.calculateIDV(
         parseFloat(exShowroomPrice),
-        parseInt(yearOfManufacture),
+        parseInt(yearOfRegistration),
         registrationDate
       );
       
@@ -307,7 +323,7 @@ router.post('/buy', auth, upload.fields([
         vehicleCategory: vehicleCategory || '4W',
         policyType: policyType || 'Comprehensive',
         engineCapacity: parseFloat(engineCapacity),
-        yearOfManufacture: parseInt(yearOfManufacture),
+        yearOfRegistration: parseInt(yearOfRegistration),
         registrationDate: registrationDate,
         exShowroomPrice: parseFloat(exShowroomPrice),
         previousNCB: parsedPreviousPolicy?.ncbPercentage || 0,
@@ -446,7 +462,7 @@ router.post('/buy', auth, upload.fields([
       variant: variant || '',
       fuelType: fuelType || 'Petrol',
       modelYear: parseInt(modelYear),
-      yearOfManufacture: parseInt(yearOfManufacture || modelYear),
+      yearOfRegistration: parseInt(yearOfRegistration || modelYear),
       engineCapacity: parseFloat(engineCapacity),
       seatingCapacity: parseInt(seatingCapacity || 5),
       registrationNumber: registrationNumber.toUpperCase().trim(),

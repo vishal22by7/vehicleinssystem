@@ -29,7 +29,7 @@ interface Policy {
   vehicleType?: string;
   fuelType?: string;
   modelYear?: number;
-  yearOfManufacture?: number;
+  yearOfRegistration?: number;
   engineCapacity?: number;
   seatingCapacity?: number;
   registrationDate?: string;
@@ -256,7 +256,7 @@ export default function PolicyDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Model Year:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{policy.modelYear || policy.yearOfManufacture || 'N/A'}</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{policy.modelYear || policy.yearOfRegistration || 'N/A'}</span>
                 </div>
                 {policy.chassisNumber && (
                   <div className="flex justify-between">

@@ -66,24 +66,27 @@ const ADDON_MULTIPLIERS = {
 /**
  * Calculate IDV (Insured Declared Value)
  */
-function calculateIDV(exShowroomPrice, yearOfManufacture, registrationDate) {
+function calculateIDV(exShowroomPrice, yearOfRegistration, registrationDate) {
   const now = new Date();
   const regDate = new Date(registrationDate);
-  const yearsSinceReg = now.getFullYear() - regDate.getFullYear();
-  const monthsSinceReg = (now.getMonth() - regDate.getMonth()) + (yearsSinceReg * 12);
+  const regYear = regDate.getFullYear();
+  const yearsSinceReg = now.getFullYear() - regYear;
+  
+  // Calculate age in months from registration date (not manufacture date)
+  // Insurance age is calculated from registration date as per IRDAI guidelines
+  const monthsSinceReg = (now.getFullYear() - regYear) * 12 + (now.getMonth() - regDate.getMonth());
   
   let depreciationRate = 0;
   
-  // Find applicable depreciation rate
+  // Find applicable depreciation rate based on registration date
   for (const dep of DEPRECIATION_TABLE) {
-    const ageInMonths = (now.getFullYear() - yearOfManufacture) * 12 + (now.getMonth() - 0);
-    if (ageInMonths < dep.months) {
+    if (monthsSinceReg < dep.months) {
       depreciationRate = dep.rate;
       break;
     }
   }
   
-  // If vehicle is older than 5 years, use market value (mutually agreed)
+  // If vehicle is older than 5 years from registration, use market value (mutually agreed)
   if (yearsSinceReg >= 5) {
     // For vehicles older than 5 years, IDV is typically 50% of ex-showroom
     depreciationRate = 0.50;
@@ -177,7 +180,7 @@ function calculatePremium(data) {
     vehicleCategory,
     policyType,
     engineCapacity,
-    yearOfManufacture,
+    yearOfRegistration,
     registrationDate,
     exShowroomPrice,
     previousNCB = 0,
@@ -195,20 +198,69 @@ function calculatePremium(data) {
     finalPremium: 0
   };
   
-  // Calculate IDV
-  const idv = exShowroomPrice ? calculateIDV(exShowroomPrice, yearOfManufacture, registrationDate) : null;
-  const vehicleAge = new Date().getFullYear() - yearOfManufacture;
+  // Vehicle age for insurance purposes is calculated from registration date, not manufacture date
+  const regDate = registrationDate ? new Date(registrationDate) : new Date();
+  const vehicleAge = new Date().getFullYear() - regDate.getFullYear();
   
   // Normalize policy type name for matching (case-insensitive)
-  const policyTypeLower = (policyType || '').toLowerCase();
+  const policyTypeLower = (policyType || '').toLowerCase().trim();
+  
+  // Default exShowroomPrice if not provided (based on vehicle category)
+  const defaultExShowroomPrice = vehicleCategory === '2W' ? 100000 : 500000;
+  const effectiveExShowroomPrice = exShowroomPrice || defaultExShowroomPrice;
+  
+  // Calculate IDV - always calculate even with default price
+  const idv = calculateIDV(effectiveExShowroomPrice, yearOfRegistration, registrationDate);
+  
+  console.log('📊 Premium Calculation Input:', {
+    vehicleCategory,
+    policyType: policyTypeLower,
+    engineCapacity,
+    exShowroomPrice: effectiveExShowroomPrice,
+    idv,
+    vehicleAge,
+    previousNCB
+  });
+  
+  // Comprehensive policy type matching - handle all variations
+  // Check for Third-Party (TP) component - any policy that includes TP coverage
+  const tpKeywords = [
+    'tp', 'third-party', 'third party', 'thirdparty',
+    'comprehensive', 'comprehensive private car', 'comprehensive car',
+    'two-wheeler third-party', 'two wheeler third party',
+    'third-party liability', 'third party liability',
+    'long-term tp', 'long term tp'
+  ];
+  let isTPPolicy = tpKeywords.some(keyword => policyTypeLower.includes(keyword));
+  
+  // Check for Own Damage (OD) component - any policy that includes OD coverage
+  const odKeywords = [
+    'od', 'own damage', 'owndamage', 'own-damage',
+    'comprehensive', 'comprehensive private car', 'comprehensive car',
+    'standalone', 'stand-alone', 'stand alone',
+    'zero-depreciation', 'zero depreciation', 'zero depreciation premium',
+    'electric vehicle', 'electric vehicle comprehensive',
+    'two-wheeler comprehensive', 'two wheeler comprehensive',
+    'comprehensive private car'
+  ];
+  let isODPolicy = odKeywords.some(keyword => policyTypeLower.includes(keyword));
+  
+  // If policy type is empty or unrecognized, default to comprehensive
+  if (!policyTypeLower || policyTypeLower === '') {
+    console.warn('⚠️  Policy type is empty, defaulting to Comprehensive');
+    isTPPolicy = true;
+    isODPolicy = true;
+  }
+  
+  console.log('📋 Policy Type Analysis:', { 
+    isTPPolicy, 
+    isODPolicy, 
+    policyTypeLower,
+    willCalculateTP: isTPPolicy,
+    willCalculateOD: isODPolicy && !!idv
+  });
   
   // Calculate TP Premium (if required)
-  // Check if policy type contains "TP", "Third-Party", or "Comprehensive"
-  const isTPPolicy = policyTypeLower.includes('tp') || 
-                     policyTypeLower.includes('third-party') || 
-                     policyTypeLower.includes('third party') ||
-                     policyTypeLower.includes('comprehensive');
-  
   if (isTPPolicy) {
     breakdown.tpPremium = getIRDATPPremium(vehicleCategory, engineCapacity);
     breakdown.tpPremium += PA_COVER; // Add PA cover
@@ -216,17 +268,8 @@ function calculatePremium(data) {
   }
   
   // Calculate OD Premium (if required)
-  // Check if policy type contains "OD", "Own Damage", or "Comprehensive"
-  const isODPolicy = policyTypeLower.includes('od') || 
-                     policyTypeLower.includes('own damage') ||
-                     policyTypeLower.includes('comprehensive') ||
-                     policyTypeLower.includes('standalone') ||
-                     policyTypeLower.includes('stand-alone');
-  
-  console.log('📋 OD Policy check:', { isODPolicy, policyTypeLower, hasIdv: !!idv });
-  
   if (isODPolicy) {
-    if (idv) {
+    if (idv && idv > 0) {
       // Pass vehicleCategory instead of vehicleType for proper 2W/4W detection
       breakdown.odPremium = calculateODPremium(idv, vehicleAge, vehicleCategory);
       console.log('✅ OD Premium (before NCB):', breakdown.odPremium);
@@ -241,18 +284,84 @@ function calculatePremium(data) {
       breakdown.addOnsPremium = addOnsResult.totalAddOnsPremium;
       console.log('✅ Add-ons Premium:', breakdown.addOnsPremium);
     } else {
-      console.warn('⚠️  IDV is null, cannot calculate OD premium');
+      console.warn('⚠️  IDV is invalid or zero, cannot calculate OD premium. IDV:', idv);
+      // If IDV is invalid but we need OD, use a fallback calculation
+      if (isODPolicy && !isTPPolicy) {
+        // For OD-only policies, we need some premium, so use a fallback
+        const fallbackIDV = effectiveExShowroomPrice * 0.8; // 80% of ex-showroom as fallback
+        breakdown.odPremium = calculateODPremium(fallbackIDV, vehicleAge, vehicleCategory);
+        breakdown.ncbDiscount = calculateNCBDiscount(breakdown.odPremium, previousNCB);
+        breakdown.odPremium -= breakdown.ncbDiscount;
+        console.log('⚠️  Using fallback IDV for OD calculation:', fallbackIDV);
+      }
     }
+  }
+  
+  // If neither TP nor OD was calculated, this is an error
+  if (!isTPPolicy && !isODPolicy) {
+    console.error('❌ Unknown policy type:', policyType);
+    // Default to comprehensive if policy type is unrecognized
+    breakdown.tpPremium = getIRDATPPremium(vehicleCategory, engineCapacity) + PA_COVER;
+    if (idv && idv > 0) {
+      breakdown.odPremium = calculateODPremium(idv, vehicleAge, vehicleCategory);
+      breakdown.ncbDiscount = calculateNCBDiscount(breakdown.odPremium, previousNCB);
+      breakdown.odPremium -= breakdown.ncbDiscount;
+    }
+    console.log('⚠️  Defaulted to Comprehensive policy calculation');
   }
   
   // Calculate base premium (sum of TP and OD before GST)
   breakdown.basePremium = breakdown.tpPremium + breakdown.odPremium + breakdown.addOnsPremium;
+  
+  // Ensure we have at least some premium calculated
+  if (breakdown.basePremium === 0) {
+    console.error('❌ ERROR: Total premium is zero!', {
+      tpPremium: breakdown.tpPremium,
+      odPremium: breakdown.odPremium,
+      addOnsPremium: breakdown.addOnsPremium,
+      isTPPolicy,
+      isODPolicy,
+      idv,
+      policyTypeLower
+    });
+    // Fallback: Calculate minimum premium based on vehicle category
+    breakdown.tpPremium = getIRDATPPremium(vehicleCategory, engineCapacity) + PA_COVER;
+    if (idv && idv > 0) {
+      breakdown.odPremium = calculateODPremium(idv, vehicleAge, vehicleCategory);
+      breakdown.ncbDiscount = calculateNCBDiscount(breakdown.odPremium, previousNCB);
+      breakdown.odPremium -= breakdown.ncbDiscount;
+    }
+    breakdown.basePremium = breakdown.tpPremium + breakdown.odPremium + breakdown.addOnsPremium;
+    console.log('⚠️  Applied fallback calculation. New base premium:', breakdown.basePremium);
+  }
   
   // Calculate GST
   breakdown.gst = Math.round(breakdown.basePremium * GST_RATE);
   
   // Final Premium
   breakdown.finalPremium = breakdown.basePremium + breakdown.gst;
+  
+  // Final validation - ensure final premium is not zero
+  if (breakdown.finalPremium === 0) {
+    console.error('❌ CRITICAL: Final premium is still zero after all calculations!');
+    // Emergency fallback: minimum premium based on vehicle category
+    const minPremium = vehicleCategory === '2W' ? 2000 : 5000;
+    breakdown.tpPremium = minPremium;
+    breakdown.basePremium = minPremium;
+    breakdown.gst = Math.round(minPremium * GST_RATE);
+    breakdown.finalPremium = breakdown.basePremium + breakdown.gst;
+    console.log('⚠️  Applied emergency minimum premium:', breakdown.finalPremium);
+  }
+  
+  console.log('💰 Final Premium Breakdown:', {
+    tpPremium: breakdown.tpPremium,
+    odPremium: breakdown.odPremium,
+    addOnsPremium: breakdown.addOnsPremium,
+    ncbDiscount: breakdown.ncbDiscount,
+    basePremium: breakdown.basePremium,
+    gst: breakdown.gst,
+    finalPremium: breakdown.finalPremium
+  });
   
   return {
     idv,

@@ -30,7 +30,7 @@ router.get('/policy-types', async (req, res) => {
 router.post('/premium', [
   body('vehicleCategory').notEmpty().withMessage('Vehicle category is required'),
   body('policyType').notEmpty().withMessage('Policy type is required'),
-  body('yearOfManufacture').isInt({ min: 1900, max: new Date().getFullYear() + 1 }).withMessage('Valid year is required'),
+  body('yearOfRegistration').isInt({ min: 1900, max: new Date().getFullYear() + 1 }).withMessage('Valid year is required'),
   body('engineCapacity').isFloat({ min: 0 }).withMessage('Engine capacity is required')
 ], async (req, res) => {
   try {
@@ -43,7 +43,7 @@ router.post('/premium', [
       vehicleCategory,
       policyType,
       engineCapacity,
-      yearOfManufacture,
+      yearOfRegistration,
       registrationDate,
       exShowroomPrice,
       previousNCB = 0,
@@ -56,7 +56,7 @@ router.post('/premium', [
       vehicleCategory,
       policyType,
       engineCapacity: parseFloat(engineCapacity),
-      yearOfManufacture: parseInt(yearOfManufacture),
+      yearOfRegistration: parseInt(yearOfRegistration),
       registrationDate: registrationDate || new Date().toISOString(),
       exShowroomPrice: exShowroomPrice || 500000, // Default if not provided
       previousNCB: parseFloat(previousNCB) || 0,
@@ -91,7 +91,7 @@ router.post('/premium', [
 // Calculate IDV
 router.post('/idv', [
   body('exShowroomPrice').isFloat({ min: 0 }).withMessage('Ex-showroom price is required'),
-  body('yearOfManufacture').isInt({ min: 1900 }).withMessage('Valid year is required'),
+  body('yearOfRegistration').isInt({ min: 1900 }).withMessage('Valid year is required'),
   body('registrationDate').isISO8601().withMessage('Valid registration date is required')
 ], async (req, res) => {
   try {
@@ -100,10 +100,10 @@ router.post('/idv', [
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { exShowroomPrice, yearOfManufacture, registrationDate } = req.body;
+    const { exShowroomPrice, yearOfRegistration, registrationDate } = req.body;
     const idv = premiumCalculator.calculateIDV(
       parseFloat(exShowroomPrice),
-      parseInt(yearOfManufacture),
+      parseInt(yearOfRegistration),
       registrationDate
     );
 

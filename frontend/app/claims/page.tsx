@@ -15,6 +15,8 @@ interface Claim {
   status: string;
   submittedAt: string;
   mlSeverity?: number;
+  payoutAmount?: number;
+  payoutStatus?: string;
   policy?: {  // Backend returns 'policy', not 'policyId'
     vehicleBrand: string;
     vehicleModel: string;
@@ -144,12 +146,15 @@ export default function ClaimsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Severity
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Submitted
-                  </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Payout
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Submitted
+                    </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Actions
                   </th>
@@ -207,6 +212,17 @@ export default function ClaimsPage() {
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(claim.status)}`}>
                         {claim.status}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {claim.status === 'Approved' && claim.payoutAmount ? (
+                        <div className="text-sm font-semibold text-green-600 dark:text-green-400">
+                          ₹{new Intl.NumberFormat('en-IN').format(claim.payoutAmount)}
+                        </div>
+                      ) : claim.status === 'Approved' ? (
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Calculating...</span>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {new Date(claim.submittedAt).toLocaleDateString()}

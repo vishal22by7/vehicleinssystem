@@ -44,7 +44,6 @@ export default function LoginPage() {
 
       if (res.data.success) {
         login(res.data.user, res.data.token);
-        toast.success('Login successful!');
         const redirect = searchParams.get('redirect') || '/dashboard';
         router.push(redirect);
       }

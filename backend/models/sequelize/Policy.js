@@ -89,9 +89,10 @@ const Policy = sequelize.define('Policy', {
     type: DataTypes.INTEGER,
     allowNull: false
   },
-  yearOfManufacture: {
+  yearOfRegistration: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: false,
+    field: 'yearOfManufacture' // Map to existing database column for backward compatibility
   },
   engineCapacity: {
     type: DataTypes.DECIMAL(5, 2),

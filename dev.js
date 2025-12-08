@@ -75,5 +75,4 @@ process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
 console.log('\n\x1b[32m✅ All services started!\x1b[0m');
-console.log('\x1b[33mPress Ctrl+C to stop all services\x1b[0m\n');
 

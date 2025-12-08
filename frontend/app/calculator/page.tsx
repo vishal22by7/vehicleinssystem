@@ -3,28 +3,56 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import Tooltip from '@/components/Tooltip';
 import { calculatorAPI } from '@/lib/api';
 
 export default function CalculatorPage() {
   const [formData, setFormData] = useState({
     vehicleCategory: '4W',
-    policyType: 'Comprehensive',
+    policyType: '',
+    policyTypeId: '',
     engineCapacity: '',
-    yearOfManufacture: new Date().getFullYear().toString(),
+    yearOfRegistration: new Date().getFullYear().toString(),
     registrationDate: new Date().toISOString().split('T')[0],
     exShowroomPrice: '',
     previousNCB: '0',
     addOns: [] as string[]
   });
+  const [policyTypes, setPolicyTypes] = useState<any[]>([]);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    fetchPolicyTypes();
+  }, []);
+
+  const fetchPolicyTypes = async () => {
+    try {
+      const res = await calculatorAPI.getPolicyTypes();
+      if (res.data.success) {
+        setPolicyTypes(res.data.policyTypes);
+      }
+    } catch (error) {
+      toast.error('Failed to load policy types');
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    
+    if (name === 'policyTypeId') {
+      const selectedPolicyType = policyTypes.find(pt => (pt.id || pt._id) === value);
+      setFormData({
+        ...formData,
+        policyTypeId: value,
+        policyType: selectedPolicyType?.name || ''
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
   };
 
   const handleAddOnToggle = (addOnId: string) => {
@@ -37,18 +65,22 @@ export default function CalculatorPage() {
   };
 
   const calculatePremium = async () => {
-    if (!formData.engineCapacity || !formData.yearOfManufacture) {
+    if (!formData.engineCapacity || !formData.yearOfRegistration || !formData.policyTypeId) {
       toast.error('Please fill all required fields');
       return;
     }
 
     setLoading(true);
     try {
+      // Get the policy type name from the selected policy type
+      const selectedPolicyType = policyTypes.find(pt => (pt.id || pt._id) === formData.policyTypeId);
+      const policyTypeName = selectedPolicyType?.name || formData.policyType;
+
       const res = await calculatorAPI.calculatePremium({
         vehicleCategory: formData.vehicleCategory,
-        policyType: formData.policyType,
+        policyType: policyTypeName,
         engineCapacity: parseFloat(formData.engineCapacity),
-        yearOfManufacture: parseInt(formData.yearOfManufacture),
+        yearOfRegistration: parseInt(formData.yearOfRegistration),
         registrationDate: formData.registrationDate,
         exShowroomPrice: parseFloat(formData.exShowroomPrice) || 500000,
         previousNCB: parseFloat(formData.previousNCB),
@@ -105,12 +137,20 @@ export default function CalculatorPage() {
                 <select
                   name="vehicleCategory"
                   value={formData.vehicleCategory}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    // Reset policy type when vehicle category changes
+                    setFormData(prev => ({
+                      ...prev,
+                      vehicleCategory: e.target.value,
+                      policyTypeId: '',
+                      policyType: ''
+                    }));
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="2W">Two Wheeler</option>
                   <option value="4W">Four Wheeler</option>
-                  <option value="Commercial">Commercial Vehicle</option>
                 </select>
               </div>
 
@@ -119,15 +159,36 @@ export default function CalculatorPage() {
                   Policy Type *
                 </label>
                 <select
-                  name="policyType"
-                  value={formData.policyType}
+                  name="policyTypeId"
+                  value={formData.policyTypeId}
                   onChange={handleChange}
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
-                  <option value="TP">Third-Party Only</option>
-                  <option value="OD">Own Damage Only</option>
-                  <option value="Comprehensive">Comprehensive</option>
+                  <option value="">Select Policy Type</option>
+                  {policyTypes
+                    .filter(pt => {
+                      // Filter policy types based on vehicle category
+                      const category = formData.vehicleCategory?.toUpperCase() || '';
+                      const name = pt.name?.toLowerCase() || '';
+                      
+                      if (category === '2W') {
+                        return name.includes('two-wheeler');
+                      } else if (category === '4W') {
+                        return !name.includes('two-wheeler') && !name.includes('commercial');
+                      }
+                      return true; // Show all if no category selected
+                    })
+                    .map((pt) => (
+                      <option key={pt.id || pt._id} value={pt.id || pt._id}>
+                        {pt.name} - {pt.description}
+                      </option>
+                    ))}
                 </select>
+                {formData.policyTypeId && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {policyTypes.find(pt => (pt.id || pt._id) === formData.policyTypeId)?.description}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -149,12 +210,29 @@ export default function CalculatorPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Year of Manufacture *
+                    <div className="flex items-center gap-2">
+                      <span>Year of Registration *</span>
+                      <Tooltip 
+                        title="Year of Registration"
+                        text="Year when your vehicle was first registered with the RTO (Year when you bought the vehicle)."
+                        position="right"
+                      >
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          aria-label="Information about Year of Registration"
+                        >
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </Tooltip>
+                    </div>
                   </label>
                   <input
                     type="number"
-                    name="yearOfManufacture"
-                    value={formData.yearOfManufacture}
+                    name="yearOfRegistration"
+                    value={formData.yearOfRegistration}
                     onChange={handleChange}
                     required
                     min="1900"
@@ -181,7 +259,24 @@ export default function CalculatorPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Previous NCB (%)
+                  <div className="flex items-center gap-2">
+                    <span>Previous NCB (%)</span>
+                    <Tooltip 
+                      title="No Claim Bonus (NCB)"
+                      text="A discount you get on your insurance premium for not making any claims in the previous policy year. The discount increases with each claim-free year: 20% after 1 year, 25% after 2 years, 35% after 3 years, 45% after 4 years, and 50% after 5+ years. This discount helps reduce your premium significantly."
+                      position="right"
+                    >
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900 transition-colors cursor-help focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        aria-label="Information about NCB"
+                      >
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </Tooltip>
+                  </div>
                 </label>
                 <select
                   name="previousNCB"
@@ -196,6 +291,9 @@ export default function CalculatorPage() {
                   <option value="45">45% (4 years claim-free)</option>
                   <option value="50">50% (5+ years claim-free)</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Select your NCB percentage from your previous policy to get accurate premium calculation
+                </p>
               </div>
 
               <div>
@@ -219,7 +317,7 @@ export default function CalculatorPage() {
 
               <button
                 onClick={calculatePremium}
-                disabled={loading || !formData.engineCapacity}
+                disabled={loading || !formData.engineCapacity || !formData.policyTypeId}
                 className="w-full px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 {loading ? 'Calculating...' : 'Calculate Premium'}

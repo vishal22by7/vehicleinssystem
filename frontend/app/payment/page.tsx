@@ -224,9 +224,9 @@ export default function PaymentPage() {
         } else if (key === 'policyType') {
           // Keep policyType as is (it's also needed)
           formDataToSend.append('policyType', String(formData[key] || 'Comprehensive'));
-        } else if (key === 'yearOfManufacture') {
-          // Map yearOfManufacture to modelYear if modelYear is not set
-          formDataToSend.append('modelYear', String(formData.yearOfManufacture || formData.modelYear || new Date().getFullYear()));
+        } else if (key === 'yearOfRegistration') {
+          // Map yearOfRegistration to modelYear if modelYear is not set
+          formDataToSend.append('modelYear', String(formData.yearOfRegistration || formData.modelYear || new Date().getFullYear()));
         } else if (key === 'ownerName' || key === 'ownerDOB' || key === 'ownerMobile' || 
                    key === 'ownerEmail' || key === 'pan' || key === 'kycIdType' || key === 'kycIdNumber' ||
                    key === 'previousInsurer' || key === 'previousPolicyNumber' || key === 'previousExpiryDate' ||
@@ -278,7 +278,7 @@ export default function PaymentPage() {
       
       // modelYear (required) - must be integer
       if (!formDataToSend.has('modelYear')) {
-        const yearValue = formData.modelYear || formData.yearOfManufacture || new Date().getFullYear();
+        const yearValue = formData.modelYear || formData.yearOfRegistration || new Date().getFullYear();
         formDataToSend.append('modelYear', String(parseInt(String(yearValue))));
       }
       
@@ -449,7 +449,7 @@ export default function PaymentPage() {
 
                 <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
-                    <strong>Demo Mode:</strong> Click "Pay" to complete the purchase. No actual payment will be processed. All payment details are optional for demonstration purposes.
+                    <strong>Demo Mode:</strong> Click "Pay" to complete the purchase.
                   </p>
                 </div>
               </div>

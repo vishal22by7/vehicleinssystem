@@ -10,9 +10,9 @@ const { BlockchainRecord } = require('../models/sequelize');
 // Configuration - can be moved to environment variables or database
 const AUTOMATION_CONFIG = {
   // Severity thresholds (0-100)
-  AUTO_APPROVE_MAX_SEVERITY: 30,      // Auto-approve if severity <= 30
-  AUTO_REJECT_MIN_SEVERITY: 70,       // Auto-reject if severity >= 70
-  // Between 30-70: Requires manual review (In Review)
+  AUTO_REJECT_MAX_SEVERITY: 10,       // Auto-reject if severity <= 10 (very minor, might be intentional)
+  AUTO_APPROVE_MIN_SEVERITY: 45,      // Auto-approve if severity > 45 (too much damage to be intentional)
+  // Between 10-45: Requires manual review (In Review)
   
   // Confidence thresholds (0-1)
   MIN_CONFIDENCE_FOR_AUTO_DECISION: 0.7,  // Need at least 70% confidence for auto-decision
@@ -73,12 +73,14 @@ function hasCriticalDamage(damageParts) {
  * Calculate vehicle age in years
  */
 function getVehicleAge(policy) {
-  if (!policy || !policy.yearOfManufacture) {
+  // Use yearOfRegistration if available, fallback to yearOfManufacture for backward compatibility
+  const registrationYear = policy?.yearOfRegistration || policy?.yearOfManufacture;
+  if (!policy || !registrationYear) {
     return null;
   }
   
   const currentYear = new Date().getFullYear();
-  return currentYear - policy.yearOfManufacture;
+  return currentYear - registrationYear;
 }
 
 /**
@@ -197,48 +199,33 @@ async function autoDecideClaim(claim, policy, user = null) {
     };
   }
 
-  // Rule 6: Vehicle age consideration
-  const vehicleAge = getVehicleAge(policy);
-  let severityAdjustment = 0;
-  let ageNote = '';
-  
-  if (vehicleAge !== null) {
-    if (vehicleAge >= AUTOMATION_CONFIG.VERY_OLD_VEHICLE_THRESHOLD) {
-      // Very old vehicles: be more lenient (lower threshold for approval)
-      severityAdjustment = -5;
-      ageNote = ` (Vehicle age: ${vehicleAge} years - lenient threshold applied)`;
-    } else if (vehicleAge >= AUTOMATION_CONFIG.OLD_VEHICLE_THRESHOLD) {
-      // Old vehicles: slightly more lenient
-      severityAdjustment = -3;
-      ageNote = ` (Vehicle age: ${vehicleAge} years)`;
-    }
-  }
-
-  // Rule 7: Low severity - Auto Approve (with vehicle age adjustment)
-  const adjustedApproveThreshold = AUTOMATION_CONFIG.AUTO_APPROVE_MAX_SEVERITY + severityAdjustment;
-  if (severity <= adjustedApproveThreshold) {
-    return {
-      decision: 'Approved',
-      reason: `Low severity damage (${severity}/100) with high confidence (${(confidence * 100).toFixed(1)}%)${ageNote}`,
-      confidence: confidence,
-      requiresReview: false
-    };
-  }
-
-  // Rule 8: High severity - Auto Reject
-  if (severity >= AUTOMATION_CONFIG.AUTO_REJECT_MIN_SEVERITY) {
+  // Rule 6: Very low severity (0-10) - Auto Reject
+  // Very minor damage might be intentional scratches or user error
+  if (severity <= AUTOMATION_CONFIG.AUTO_REJECT_MAX_SEVERITY) {
     return {
       decision: 'Rejected',
-      reason: `High severity damage (${severity}/100) exceeds threshold${ageNote}`,
+      reason: `Very minor damage (${severity}/100) - likely intentional or negligible. Damage is too minor to warrant a claim payout.`,
       confidence: confidence,
       requiresReview: false
     };
   }
 
-  // Rule 9: Medium severity (between thresholds) - Manual Review
+  // Rule 7: High severity (>45) - Auto Approve
+  // Too much damage to be intentional - user wouldn't cause such extensive damage
+  if (severity > AUTOMATION_CONFIG.AUTO_APPROVE_MIN_SEVERITY) {
+    return {
+      decision: 'Approved',
+      reason: `Significant damage (${severity}/100) with high confidence (${(confidence * 100).toFixed(1)}%) - damage is too extensive to be intentional`,
+      confidence: confidence,
+      requiresReview: false
+    };
+  }
+
+  // Rule 8: Medium severity (10-45) - Manual Review
+  // Requires admin review to determine if damage is legitimate
   return {
     decision: 'In Review',
-    reason: `Medium severity damage (${severity}/100) requires manual assessment${ageNote}`,
+    reason: `Moderate severity damage (${severity}/100) requires manual assessment by admin to verify legitimacy`,
     confidence: confidence,
     requiresReview: true
   };
@@ -307,16 +294,23 @@ async function applyAutoDecision(claimId) {
           const severity = claim.mlSeverity || 0;
           
           // Calculate payout: severity percentage of policy premium
+          // For severity > 45 (auto-approved), payout is based on severity
           let payoutMultiplier = severity / 100;
           
-          // Minimum payout: 10% of premium for any approved claim
-          // Maximum payout: 90% of premium (to leave some buffer)
-          if (severity >= 60) {
-            payoutMultiplier = Math.min(0.9, payoutMultiplier); // Cap at 90%
-          } else if (severity >= 40) {
-            payoutMultiplier = Math.max(0.3, payoutMultiplier); // At least 30%
+          // Payout calculation based on severity:
+          // - 45-60: 30-50% of premium
+          // - 60-75: 50-70% of premium  
+          // - 75-90: 70-85% of premium
+          // - 90+: 85-95% of premium (cap at 95% to leave buffer)
+          if (severity >= 90) {
+            payoutMultiplier = Math.min(0.95, payoutMultiplier); // Cap at 95%
+          } else if (severity >= 75) {
+            payoutMultiplier = Math.max(0.70, Math.min(0.85, payoutMultiplier));
+          } else if (severity >= 60) {
+            payoutMultiplier = Math.max(0.50, Math.min(0.70, payoutMultiplier));
           } else {
-            payoutMultiplier = Math.max(0.1, payoutMultiplier); // At least 10%
+            // 45-60 range
+            payoutMultiplier = Math.max(0.30, Math.min(0.50, payoutMultiplier));
           }
           
           const payout = Math.round(policyPremium * payoutMultiplier);

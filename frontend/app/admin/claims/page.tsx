@@ -35,6 +35,8 @@ interface Claim {
   photos: Array<{ url: string }>;
   submittedAt: string;
   mlSeverity?: number;
+  payoutAmount?: number;
+  payoutStatus?: string;
   autoDecision?: boolean;
   autoDecisionReason?: string;
   autoDecisionAt?: string;
@@ -163,6 +165,9 @@ export default function AdminClaimsPage() {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Payout
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       Severity
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -195,7 +200,7 @@ export default function AdminClaimsPage() {
                             {(claim.policy || claim.policyId)?.vehicleBrand} {(claim.policy || claim.policyId)?.vehicleModel}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {(claim.policy || claim.policyId)?.policyTypeRef?.name || (claim.policyId?.policyTypeId?.name) || 'N/A'}
+                            {claim.policy?.policyTypeRef?.name || claim.policyId?.policyTypeId?.name || 'N/A'}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -207,6 +212,17 @@ export default function AdminClaimsPage() {
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(claim.status)}`}>
                             {claim.status}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {claim.status === 'Approved' && claim.payoutAmount ? (
+                            <div className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              ₹{new Intl.NumberFormat('en-IN').format(claim.payoutAmount)}
+                            </div>
+                          ) : claim.status === 'Approved' ? (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">Calculating...</span>
+                          ) : (
+                            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {claim.mlSeverity !== null && claim.mlSeverity !== undefined ? (
