@@ -6,15 +6,27 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { adminAPI, claimAPI } from '@/lib/api';
 
 interface Claim {
-  _id: string;
-  userId: {
+  id?: string;
+  _id?: string;
+  user?: {
     name: string;
     email: string;
   };
-  policyId: {
+  userId?: {
+    name: string;
+    email: string;
+  };
+  policy?: {
     vehicleBrand: string;
     vehicleModel: string;
-    policyTypeId: {
+    policyTypeRef?: {
+      name: string;
+    };
+  };
+  policyId?: {
+    vehicleBrand: string;
+    vehicleModel: string;
+    policyTypeId?: {
       name: string;
     };
   };
@@ -23,6 +35,9 @@ interface Claim {
   photos: Array<{ url: string }>;
   submittedAt: string;
   mlSeverity?: number;
+  autoDecision?: boolean;
+  autoDecisionReason?: string;
+  autoDecisionAt?: string;
 }
 
 export default function AdminClaimsPage() {
@@ -38,7 +53,13 @@ export default function AdminClaimsPage() {
     try {
       const res = await adminAPI.getClaims();
       if (res.data.success) {
-        setClaims(res.data.claims);
+        // Normalize data to ensure both 'id' and '_id' are available
+        const normalizedClaims = res.data.claims.map((claim: any) => ({
+          ...claim,
+          id: claim.id || claim._id,
+          _id: claim._id || claim.id
+        }));
+        setClaims(normalizedClaims);
       }
     } catch (error) {
       toast.error('Failed to load claims');
@@ -63,6 +84,11 @@ export default function AdminClaimsPage() {
   };
 
   const handleDelete = async (claimId: string) => {
+    if (!claimId) {
+      toast.error('Invalid claim ID');
+      return;
+    }
+    
     if (!confirm('Are you sure you want to delete this claim? This action cannot be undone.')) {
       return;
     }
@@ -152,23 +178,24 @@ export default function AdminClaimsPage() {
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {claims.map((claim) => {
+                    const claimId = claim.id || claim._id;
                     const nextStatuses = getNextStatus(claim.status);
                     return (
-                      <tr key={claim._id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <tr key={claimId} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {claim.userId?.name || 'N/A'}
+                            {claim.user?.name || claim.userId?.name || 'N/A'}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {claim.userId?.email || 'N/A'}
+                            {claim.user?.email || claim.userId?.email || 'N/A'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {claim.policyId?.vehicleBrand} {claim.policyId?.vehicleModel}
+                            {(claim.policy || claim.policyId)?.vehicleBrand} {(claim.policy || claim.policyId)?.vehicleModel}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {claim.policyId?.policyTypeId?.name || 'N/A'}
+                            {(claim.policy || claim.policyId)?.policyTypeRef?.name || (claim.policyId?.policyTypeId?.name) || 'N/A'}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -233,21 +260,21 @@ export default function AdminClaimsPage() {
                                 {nextStatuses.map((status) => (
                                   <button
                                     key={status}
-                                    onClick={() => handleStatusUpdate(claim._id, status)}
-                                    disabled={updating === claim._id}
+                                    onClick={() => handleStatusUpdate(claimId || '', status)}
+                                    disabled={updating === claimId}
                                     className={`px-3 py-1 rounded text-xs font-medium ${
                                       status === 'Approved'
                                         ? 'bg-green-600 text-white hover:bg-green-700'
                                         : 'bg-red-600 text-white hover:bg-red-700'
                                     } disabled:opacity-50`}
                                   >
-                                    {updating === claim._id ? 'Updating...' : `Mark as ${status}`}
+                                    {updating === claimId ? 'Updating...' : `Mark as ${status}`}
                                   </button>
                                 ))}
                               </>
                             )}
                             <button
-                              onClick={() => handleDelete(claim._id)}
+                              onClick={() => handleDelete(claimId || '')}
                               className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700"
                             >
                               Delete

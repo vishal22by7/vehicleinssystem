@@ -229,8 +229,8 @@ router.post('/submit', auth, upload.array('photos', 5), [
 
     // Create claim
     console.log('📝 Creating claim with:', { 
-      policyId, 
-      userId: req.user.id, 
+      policyId,
+      userId: req.user.id,
       description: description ? (description.length > 50 ? description.substring(0, 50) + '...' : description) : 'N/A',
       filesCount: req.files ? req.files.length : 0
     });
@@ -241,7 +241,7 @@ router.post('/submit', auth, upload.array('photos', 5), [
         userId: req.user.id,
         description: description || '',
         status: 'Submitted'
-      });
+    });
       console.log('✅ Claim created successfully:', claim.id);
     } catch (createError) {
       console.error('❌ Failed to create claim:', createError);
@@ -268,15 +268,15 @@ router.post('/submit', auth, upload.array('photos', 5), [
           
           if (ipfsService.isAvailable()) {
             try {
-              const ipfsResult = await ipfsService.uploadFile(file.path, file.originalname);
-              
-              if (ipfsResult) {
+            const ipfsResult = await ipfsService.uploadFile(file.path, file.originalname);
+            
+            if (ipfsResult) {
                 // Handle both object and string return types
                 if (typeof ipfsResult === 'string') {
                   ipfsCid = ipfsResult;
                   ipfsUrl = ipfsService.getGatewayUrl ? ipfsService.getGatewayUrl(ipfsResult) : null;
                 } else if (ipfsResult.cid) {
-                  ipfsCid = ipfsResult.cid;
+              ipfsCid = ipfsResult.cid;
                   ipfsUrl = ipfsResult.url || (ipfsService.getGatewayUrl ? ipfsService.getGatewayUrl(ipfsResult.cid) : null);
                 } else {
                   ipfsCid = ipfsResult;
@@ -284,15 +284,15 @@ router.post('/submit', auth, upload.array('photos', 5), [
                 }
                 
                 if (ipfsCid) {
-                  evidenceCids.push(ipfsCid);
-                  console.log(`✅ Photo uploaded to IPFS: ${ipfsCid}`);
-                  
-                  // Store first photo CID for ML analysis
-                  if (!firstPhotoCID) {
-                    firstPhotoCID = ipfsCid;
-                  }
+              evidenceCids.push(ipfsCid);
+              console.log(`✅ Photo uploaded to IPFS: ${ipfsCid}`);
+              
+              // Store first photo CID for ML analysis
+              if (!firstPhotoCID) {
+                firstPhotoCID = ipfsCid;
+              }
                 }
-              } else {
+            } else {
                 console.warn('⚠️  IPFS upload returned null, continuing with local storage');
               }
             } catch (ipfsError) {
@@ -359,12 +359,12 @@ router.post('/submit', auth, upload.array('photos', 5), [
     // Wrap entire ML section in try-catch to prevent crashes
     let mlReport = null;
     try {
-      console.log(`\n🔍 ML Analysis Check:`);
-      console.log(`   firstPhotoPath: ${firstPhotoPath}`);
-      console.log(`   firstPhotoPath exists: ${firstPhotoPath ? fs.existsSync(firstPhotoPath) : 'N/A'}`);
-      console.log(`   ML_ANALYZER_URL: ${ML_ANALYZER_URL}`);
-      
-      if (firstPhotoPath && fs.existsSync(firstPhotoPath)) {
+    console.log(`\n🔍 ML Analysis Check:`);
+    console.log(`   firstPhotoPath: ${firstPhotoPath}`);
+    console.log(`   firstPhotoPath exists: ${firstPhotoPath ? fs.existsSync(firstPhotoPath) : 'N/A'}`);
+    console.log(`   ML_ANALYZER_URL: ${ML_ANALYZER_URL}`);
+    
+    if (firstPhotoPath && fs.existsSync(firstPhotoPath)) {
       try {
         console.log(`\n🔍 Sending image directly to Gemini for analysis:`);
         console.log(`   File path: ${firstPhotoPath}`);
@@ -431,17 +431,17 @@ router.post('/submit', auth, upload.array('photos', 5), [
           // Continue without ML analysis for other errors
         }
       }
-      } else {
-        console.warn(`\n⚠️  ML Analysis skipped:`);
-        console.warn(`   Reason: ${!firstPhotoPath ? 'No photo path set' : 'Photo file does not exist'}`);
-        if (firstPhotoPath) {
-          console.warn(`   Expected path: ${firstPhotoPath}`);
-        }
+    } else {
+      console.warn(`\n⚠️  ML Analysis skipped:`);
+      console.warn(`   Reason: ${!firstPhotoPath ? 'No photo path set' : 'Photo file does not exist'}`);
+      if (firstPhotoPath) {
+        console.warn(`   Expected path: ${firstPhotoPath}`);
       }
+    }
 
       // Save claim with any ML updates (wrap in try-catch to prevent crashes)
       try {
-        await claim.save();
+    await claim.save();
       } catch (saveError) {
         console.error('❌ Error saving claim after ML analysis:', saveError.message);
         console.error('   Save error details:', saveError);
@@ -451,6 +451,44 @@ router.post('/submit', auth, upload.array('photos', 5), [
       console.error('❌ ML Analysis section error (non-fatal):', mlSectionError.message);
       console.error('   Full error:', mlSectionError);
       // Continue with claim submission even if ML analysis fails completely
+    }
+
+    // Step 2.5: Apply Automated Decision (after ML analysis)
+    let autoDecisionResult = null;
+    try {
+      const claimAutomation = require('../services/claimAutomation');
+      console.log('\n🤖 Applying automated decision...');
+      
+      // Reload claim to get latest ML data with policy and user
+      await claim.reload({
+        include: [
+          {
+            model: Policy,
+            as: 'policy',
+            required: false
+          },
+          {
+            model: require('../models/sequelize').User,
+            as: 'user',
+            attributes: ['id', 'name', 'email'],
+            required: false
+          }
+        ]
+      });
+      
+      autoDecisionResult = await claimAutomation.applyAutoDecision(claim.id);
+      
+      if (autoDecisionResult.success) {
+        console.log(`✅ Automated decision applied: ${autoDecisionResult.decision}`);
+        if (autoDecisionResult.requiresReview) {
+          console.log(`   ⚠️  This claim requires manual review`);
+        }
+      } else {
+        console.log(`⚠️  Automated decision not applied: ${autoDecisionResult.reason}`);
+      }
+    } catch (autoError) {
+      console.error('❌ Error applying automated decision (non-fatal):', autoError.message);
+      // Continue - automation failure should not block claim submission
     }
 
     // Step 3: Write to blockchain (enhanced contract with ML data)
@@ -499,7 +537,7 @@ router.post('/submit', auth, upload.array('photos', 5), [
     } catch (reloadError) {
       console.warn('⚠️  Could not reload claim, using current data:', reloadError.message);
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'Claim submitted successfully',
@@ -513,6 +551,11 @@ router.post('/submit', auth, upload.array('photos', 5), [
         confidence: mlReport.confidence || 0,
         mlReportCID: mlReport.mlReportCID || null
       } : null,
+      automation: autoDecisionResult ? {
+        decision: autoDecisionResult.decision,
+        reason: autoDecisionResult.reason,
+        requiresReview: autoDecisionResult.requiresReview
+      } : null,
       blockchain: blockchainResult
     });
   } catch (error) {
@@ -524,7 +567,7 @@ router.post('/submit', auth, upload.array('photos', 5), [
       req.files.forEach(file => {
         if (fs.existsSync(file.path)) {
           try {
-            fs.unlinkSync(file.path);
+          fs.unlinkSync(file.path);
           } catch (unlinkError) {
             console.error('Error cleaning up file:', unlinkError);
           }

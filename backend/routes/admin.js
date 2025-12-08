@@ -240,12 +240,23 @@ router.get('/claims', async (req, res) => {
   try {
     const claims = await Claim.findAll({
       include: [
-        { model: User, as: 'user', attributes: ['name', 'email'] },
+        { 
+          model: User, 
+          as: 'user', 
+          attributes: ['id', 'name', 'email', 'phone'],
+          required: false  // Left join - allow claims without users
+        },
         { 
           model: Policy, 
           as: 'policy',
-          attributes: ['policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel'],
-          include: [{ model: PolicyType, as: 'policyTypeRef', attributes: ['name'] }]
+          attributes: ['id', 'policyTypeId', 'vehicleType', 'vehicleBrand', 'vehicleModel', 'yearOfManufacture'],
+          required: false,  // Left join - allow claims without policies
+          include: [{ 
+            model: PolicyType, 
+            as: 'policyTypeRef', 
+            attributes: ['id', 'name'],
+            required: false
+          }]
         }
       ],
       order: [['submittedAt', 'DESC']]
@@ -292,6 +303,13 @@ router.put('/claims/:id/status', [
 
     const oldStatus = claim.status;
     const updateData = { status };
+    
+    // If admin is overriding an automated decision, mark it as manual override
+    if (claim.autoDecision && (status === 'Approved' || status === 'Rejected')) {
+      updateData.autoDecision = false;
+      updateData.autoDecisionReason = `Manual override by admin. Previous: ${claim.autoDecisionReason || 'N/A'}`;
+      updateData.autoDecisionAt = null;
+    }
     
     // Calculate payout if claim is being approved
     if (status === 'Approved' && claim.payoutAmount === 0) {

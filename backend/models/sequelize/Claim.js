@@ -92,6 +92,23 @@ const Claim = sequelize.define('Claim', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  // Automation fields
+  autoDecision: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  autoDecisionReason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  autoDecisionAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  autoDecisionConfidence: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true
+  },
   submittedAt: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW

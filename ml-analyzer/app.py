@@ -105,11 +105,29 @@ def download_from_ipfs(cid: str) -> bytes:
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise Exception(f"Failed to download from IPFS: {str(e)}")
 
-def analyze_damage_with_gemini(image_bytes: bytes) -> dict:
+def analyze_damage_with_gemini(image_bytes) -> dict:
     """
     Analyze vehicle damage using Gemini Vision API
     Returns severity (0-100), damage parts, and confidence
+    @param image_bytes: bytes or BytesIO object containing image data
     """
+    # Ensure image_bytes is actually bytes, not a BytesIO object
+    if hasattr(image_bytes, 'read'):
+        # If it's a file-like object (BytesIO), read from it
+        image_bytes.seek(0)  # Reset to beginning
+        image_bytes = image_bytes.read()
+    elif not isinstance(image_bytes, bytes):
+        # Try to convert to bytes
+        try:
+            image_bytes = bytes(image_bytes)
+        except Exception as e:
+            logger.error(f"❌ Cannot convert image_bytes to bytes: {str(e)}")
+            raise ValueError(f"Cannot identify image file: {str(e)}")
+    
+    # Validate we have actual bytes
+    if not isinstance(image_bytes, bytes) or len(image_bytes) == 0:
+        raise ValueError("Invalid image data: empty or not bytes")
+    
     if not gemini_client:
         # Mock analysis for development when Gemini is not available
         import random
@@ -198,8 +216,15 @@ Not a vehicle:
 - Return valid JSON only - no additional text"""
 
         # Convert image to PIL Image
-        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        logger.info(f"🖼️  Image loaded: {image.size[0]}x{image.size[1]} pixels")
+        try:
+            # Create BytesIO from raw bytes
+            image_buffer = io.BytesIO(image_bytes)
+            image = Image.open(image_buffer).convert('RGB')
+            logger.info(f"🖼️  Image loaded: {image.size[0]}x{image.size[1]} pixels, format: {image.format}")
+        except Exception as img_error:
+            logger.error(f"❌ PIL Image.open failed: {str(img_error)}")
+            logger.error(f"   image_bytes type: {type(image_bytes)}, length: {len(image_bytes)}")
+            raise ValueError(f"Cannot identify image file: {str(img_error)}")
         
         # Generate response from Gemini using new API format
         logger.info(f"🤖 Sending request to Gemini model: {gemini_model_name}")
@@ -449,8 +474,40 @@ async def analyze_upload(file: UploadFile = File(...)):
     """
     try:
         logger.info(f"📥 Received direct file upload: {file.filename}, content_type: {file.content_type}")
-        image_bytes = await file.read()
-        logger.info(f"✅ File read successfully, size: {len(image_bytes)} bytes")
+        
+        # Read file content and ensure it's bytes, not BytesIO
+        file_content = await file.read()
+        
+        # If it's already bytes, use it directly; otherwise convert
+        if isinstance(file_content, bytes):
+            image_bytes = file_content
+        elif hasattr(file_content, 'read'):
+            # If it's a file-like object, read from it
+            image_bytes = file_content.read()
+        else:
+            # Try to convert to bytes
+            image_bytes = bytes(file_content)
+        
+        logger.info(f"✅ File read successfully, size: {len(image_bytes)} bytes, type: {type(image_bytes)}")
+        
+        # Validate that we have actual image bytes
+        if len(image_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty file received")
+        
+        # Try to validate it's an image by attempting to open it
+        try:
+            test_image = Image.open(io.BytesIO(image_bytes))
+            test_image.verify()  # Verify it's a valid image
+            logger.info(f"✅ Image validation passed: {test_image.format}, {test_image.size}")
+        except Exception as img_error:
+            logger.error(f"❌ Image validation failed: {str(img_error)}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Invalid image file",
+                    "message": f"Cannot identify image file: {str(img_error)}"
+                }
+            )
         
         logger.info("🔍 Starting Gemini damage analysis...")
         analysis = analyze_damage_with_gemini(image_bytes)

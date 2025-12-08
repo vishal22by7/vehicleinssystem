@@ -217,8 +217,8 @@ export default function BuyPolicyPage() {
       if (formData.vehicleCategory && formData.policyTypeId && formData.engineCapacity && formData.yearOfManufacture) {
         // Only calculate if we don't already have premium data or if premium is 0 (error case)
         if (premium === null || premium === 0 || !premiumBreakdown) {
-          calculatePremium();
-        }
+      calculatePremium();
+    }
       } else {
         // Show error if we're on the summary step but missing data
         if (premium === null) {
@@ -644,8 +644,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Vehicle registration number from your RC. Format: State code + 2 digits + letters + 4 digits (e.g., MH12AB1234)">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Registration Number *
-                        </label>
+                        Registration Number *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -661,8 +661,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="State where your vehicle is registered. This should match the state code in your registration number (e.g., MH for Maharashtra).">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          RTO State *
-                        </label>
+                        RTO State *
+                      </label>
                       </Tooltip>
                       <select
                         name="rtoState"
@@ -681,8 +681,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="City where your vehicle is registered with the Regional Transport Office (RTO).">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          RTO City *
-                        </label>
+                        RTO City *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -697,8 +697,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Vehicle manufacturer or brand name (e.g., Maruti Suzuki, Honda, Hyundai, Tata, Mahindra).">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Make (Brand) *
-                        </label>
+                        Make (Brand) *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -714,8 +714,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Vehicle model name (e.g., Swift, City, i20, Nexon). This is the specific model from the manufacturer.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Model *
-                        </label>
+                        Model *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -730,8 +730,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Specific variant or trim level of your vehicle (e.g., VDI, ZXI, VX, LDI). Found on your invoice or RC.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Variant *
-                        </label>
+                        Variant *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -746,8 +746,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Type of fuel your vehicle uses. Select the primary fuel type (Petrol, Diesel, CNG, Electric, or Hybrid).">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Fuel Type *
-                        </label>
+                        Fuel Type *
+                      </label>
                       </Tooltip>
                       <select
                         name="fuelType"
@@ -768,8 +768,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Engine displacement in cubic centimeters (CC). For 2-wheelers: typically 100-350cc. For cars: typically 1000-3000cc. Found on your RC or invoice. Used to calculate third-party premium.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Engine Capacity (CC) *
-                        </label>
+                        Engine Capacity (CC) *
+                      </label>
                       </Tooltip>
                       <input
                         type="number"
@@ -786,8 +786,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Year when the vehicle was manufactured (not registration year). Usually found on the vehicle's invoice or RC. Used to calculate vehicle age and depreciation.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Year of Manufacture *
-                        </label>
+                        Year of Manufacture *
+                      </label>
                       </Tooltip>
                       <input
                         type="number"
@@ -804,8 +804,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="17-character Vehicle Identification Number (VIN) or Chassis Number. Found on your RC, invoice, or engine bay. Format: Letters and numbers only (no I, O, Q to avoid confusion).">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Chassis Number (VIN) *
-                        </label>
+                        Chassis Number (VIN) *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -829,8 +829,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Total number of seats including driver. For 2-wheelers: usually 2. For cars: typically 4-7. Found on your RC.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Seating Capacity *
-                        </label>
+                        Seating Capacity *
+                      </label>
                       </Tooltip>
                       <input
                         type="number"
@@ -846,8 +846,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Engine number engraved on your vehicle's engine block. Usually found on the engine or in your RC. Optional but recommended for verification.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Engine Number
-                        </label>
+                        Engine Number
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -896,8 +896,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Name of your previous insurance company (e.g., HDFC Ergo, ICICI Lombard, Bajaj Allianz). Optional if this is your first policy.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Previous Insurer
-                        </label>
+                        Previous Insurer
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -911,8 +911,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Policy number from your previous insurance policy. Found on your old policy document. Optional if this is your first policy.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Previous Policy Number
-                        </label>
+                        Previous Policy Number
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -926,8 +926,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Expiry date of your previous insurance policy. Used to calculate break in insurance period. Optional if this is your first policy.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Previous Expiry Date
-                        </label>
+                        Previous Expiry Date
+                      </label>
                       </Tooltip>
                       <input
                         type="date"
@@ -941,8 +941,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="No Claim Bonus (NCB) percentage from your previous policy. NCB gives discount on premium: 0% (no claims), 20% (1 year), 25% (2 years), 35% (3 years), 45% (4 years), 50% (5+ years). Select 0% if this is your first policy.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Previous NCB (%)
-                        </label>
+                        Previous NCB (%)
+                      </label>
                       </Tooltip>
                       <select
                         name="previousNCB"
@@ -962,8 +962,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Number of days between expiry of previous policy and start of new policy. If you renewed immediately, enter 0. Used to determine if NCB is applicable.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          Break in Insurance (days)
-                        </label>
+                        Break in Insurance (days)
+                      </label>
                       </Tooltip>
                       <input
                         type="number"
@@ -1060,8 +1060,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Permanent Account Number (PAN) issued by Income Tax Department. Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F). Required for insurance policies above ₹50,000.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          PAN Number *
-                        </label>
+                        PAN Number *
+                      </label>
                       </Tooltip>
                       <input
                         type="text"
@@ -1082,8 +1082,8 @@ export default function BuyPolicyPage() {
                     <div>
                       <Tooltip text="Type of identity document for KYC verification. Select Aadhaar, Driving License, Passport, or Voter ID. Optional but recommended.">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 cursor-help">
-                          KYC ID Type
-                        </label>
+                        KYC ID Type
+                      </label>
                       </Tooltip>
                       <select
                         name="kycIdType"
