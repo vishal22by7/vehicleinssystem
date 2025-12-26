@@ -55,7 +55,6 @@ export default function AdminClaimsPage() {
     try {
       const res = await adminAPI.getClaims();
       if (res.data.success) {
-        // Normalize data to ensure both 'id' and '_id' are available
         const normalizedClaims = res.data.claims.map((claim: any) => ({
           ...claim,
           id: claim.id || claim._id,

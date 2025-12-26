@@ -15,7 +15,7 @@ async function loadIPFSClient() {
   if (ipfsLoadPromise) {
     return ipfsLoadPromise;
   }
-  
+
   ipfsLoadPromise = (async () => {
     try {
       // Use dynamic import for ESM modules (ipfs-http-client v60+)
@@ -30,7 +30,7 @@ async function loadIPFSClient() {
       return false;
     }
   })();
-  
+
   return ipfsLoadPromise;
 }
 
@@ -48,7 +48,7 @@ class IPFSService {
     this.usePinata = Boolean(this.pinataJWT || (this.pinataApiKey && this.pinataSecretApiKey));
     this.ipfsAvailable = false;
     this.initialized = false;
-    
+
     if (this.usePinata) {
       this.ipfsAvailable = true;
       this.initialized = true;
@@ -63,7 +63,7 @@ class IPFSService {
   async initialize() {
     // Load IPFS client module
     const loaded = await loadIPFSClient();
-    
+
     if (!loaded) {
       console.warn('⚠️  IPFS client not available, IPFS features disabled');
       console.warn('   This is OK for development. Photos will be saved locally.');
@@ -71,7 +71,7 @@ class IPFSService {
       this.ipfsAvailable = false;
       return;
     }
-    
+
     // Initialize IPFS connection
     await this.init();
   }
@@ -80,7 +80,7 @@ class IPFSService {
     if (!ipfsAvailable || !ipfsClient) {
       return;
     }
-    
+
     try {
       // Handle different IPFS client versions
       let createFn = null;
@@ -91,7 +91,7 @@ class IPFSService {
       } else if (ipfsClient.default && ipfsClient.default.create) {
         createFn = ipfsClient.default.create;
       }
-      
+
       if (createFn) {
         // Try to connect to IPFS - if it fails, we'll handle gracefully
         try {
@@ -126,17 +126,21 @@ class IPFSService {
     if (!this.initialized) {
       await this.initialize();
     }
-    
+
+    // Read file directly (no encryption)
+    const fileBuffer = fs.readFileSync(filePath);
+
     if (this.usePinata) {
-      return this.uploadViaPinata(fs.createReadStream(filePath), fileName);
+      const stream = Readable.from(fileBuffer);
+      return await this.uploadViaPinata(stream, fileName);
     }
 
     if (!this.ipfsAvailable || !this.ipfs) {
       console.warn('⚠️  IPFS not available, skipping upload');
       return null;
     }
-    
-    return this.uploadViaLocalIPFS(fs.readFileSync(filePath), fileName);
+
+    return await this.uploadViaLocalIPFS(fileBuffer, fileName);
   }
 
   async uploadBuffer(buffer, fileName) {
@@ -144,20 +148,42 @@ class IPFSService {
     if (!this.initialized) {
       await this.initialize();
     }
-    
+
     if (this.usePinata) {
       const stream = Readable.from(buffer);
-      return this.uploadViaPinata(stream, fileName);
+      return await this.uploadViaPinata(stream, fileName);
     }
 
     if (!this.ipfsAvailable || !this.ipfs) {
       console.warn('⚠️  IPFS not available, skipping upload');
       return null;
     }
-    
-    return this.uploadViaLocalIPFS(buffer, fileName);
+
+    return await this.uploadViaLocalIPFS(buffer, fileName);
   }
-  
+
+  /**
+   * Download file from IPFS
+   * @param {string} cid - IPFS CID
+   * @returns {Buffer} - File buffer
+   */
+  async download(cid) {
+    try {
+      const gateway = this.usePinata ? this.pinataGateway : this.gatewayUrl;
+      const url = `${gateway}/${cid}`;
+
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 30000
+      });
+
+      return Buffer.from(response.data);
+    } catch (error) {
+      console.error(`❌ Failed to download from IPFS: ${error.message}`);
+      throw error;
+    }
+  }
+
   isAvailable() {
     return this.usePinata || (this.ipfsAvailable && this.ipfs !== null);
   }
@@ -172,7 +198,7 @@ class IPFSService {
       formData.append('file', stream, { filename: fileName });
       formData.append('pinataMetadata', JSON.stringify({ name: fileName }));
       formData.append('pinataOptions', JSON.stringify({ cidVersion: 1 }));
-      
+
       const headers = {
         ...formData.getHeaders()
       };

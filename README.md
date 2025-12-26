@@ -5,6 +5,7 @@ A blockchain-integrated vehicle insurance management system with IPFS file stora
 ## 📋 Features
 
 ### User Features
+
 - ✅ User registration and authentication
 - ✅ Premium calculator
 - ✅ Buy insurance policies
@@ -13,6 +14,7 @@ A blockchain-integrated vehicle insurance management system with IPFS file stora
 - ✅ View policies and claims
 
 ### Admin Features
+
 - ✅ Admin dashboard with statistics
 - ✅ Manage policy types
 - ✅ View all users, policies, and claims
@@ -20,6 +22,7 @@ A blockchain-integrated vehicle insurance management system with IPFS file stora
 - ✅ Update claim workflow status
 
 ### Blockchain Integration
+
 - ✅ Immutable policy issuance records
 - ✅ Immutable claim submission records
 - ✅ Claim status update tracking
@@ -48,43 +51,45 @@ A blockchain-integrated vehicle insurance management system with IPFS file stora
 ### Quick Setup Steps:
 
 1. **Install dependencies:**
+
    ```powershell
    npm run install-all
    ```
 
 2. **Create PostgreSQL database:**
+
    ```powershell
    psql -U postgres -c "CREATE DATABASE vims;"
    ```
 
 3. **Configure environment:**
+
    ```powershell
-   # Run setup script
-   .\setup-project.ps1
-   
-   # Or manually copy backend\.env.example to backend\.env
+   # Copy backend\.env.example to backend\.env
    # and update DB_PASSWORD with your PostgreSQL password
    ```
 
 4. **Start services:**
+
    ```powershell
    # Option 1: Use start script (opens separate windows)
    .\start-all.ps1
-   
+
    # Option 2: Use single command (all in one terminal)
    npm run dev
-   
+
    # Option 3: Manual (separate terminals)
    # Terminal 1:
    cd backend
    npm run dev
-   
+
    # Terminal 2:
    cd frontend
    npm run dev
    ```
 
 5. **Initialize data:**
+
    ```powershell
    cd backend
    npm run seed-policy-types
@@ -174,6 +179,7 @@ vims-project/
 ## 🐛 Troubleshooting
 
 ### PostgreSQL Connection Error
+
 ```powershell
 # Check if PostgreSQL is running
 Get-Service postgresql*
@@ -186,6 +192,7 @@ psql -U postgres -d vims
 ```
 
 ### Port Already in Use
+
 ```powershell
 # Find process using port 5000
 netstat -ano | findstr :5000
@@ -195,6 +202,7 @@ taskkill /PID <PID> /F
 ```
 
 ### Frontend Can't Connect to Backend
+
 - Verify backend is running: http://localhost:5000/api/health
 - Check `FRONTEND_URL` in `backend/.env`
 - Check browser console for errors (F12)
@@ -208,25 +216,30 @@ taskkill /PID <PID> /F
 ## 📝 API Endpoints
 
 ### Auth
+
 - `POST /api/auth/register` - Register user
 - `POST /api/auth/login` - Login
 - `GET /api/auth/me` - Get current user
 
 ### Policies
+
 - `GET /api/policies` - Get user's policies
 - `GET /api/policies/:id` - Get policy by ID
 - `POST /api/policies/buy` - Buy policy
 
 ### Claims
+
 - `GET /api/claims` - Get user's claims
 - `GET /api/claims/:id` - Get claim by ID
 - `POST /api/claims/submit` - Submit claim (multipart/form-data)
 
 ### Calculator
+
 - `GET /api/calculator/policy-types` - Get policy types
 - `POST /api/calculator/premium` - Calculate premium
 
 ### Admin
+
 - `GET /api/admin/dashboard` - Dashboard stats
 - `GET /api/admin/policy-types` - Get policy types
 - `POST /api/admin/policy-types` - Create policy type
@@ -236,28 +249,3 @@ taskkill /PID <PID> /F
 - `GET /api/admin/policies` - Get all policies
 - `GET /api/admin/claims` - Get all claims
 - `PUT /api/admin/claims/:id/status` - Update claim status
-
-## 🚀 Deployment
-
-For production deployment:
-
-1. Set `NODE_ENV=production` in backend `.env`
-2. Use a production PostgreSQL instance
-3. Deploy smart contract to a testnet/mainnet
-4. Use a production IPFS service (Pinata, Infura, etc.)
-5. Update CORS settings
-6. Use environment variables for all secrets
-7. Build frontend: `cd frontend && npm run build`
-8. Run migrations: `cd backend && npm run migrate`
-
-## 📄 License
-
-MIT
-
-## 👥 Contributors
-
-Built as a complete blockchain-integrated insurance management system.
-
----
-
-**Note**: This is a development version. Ensure all security measures are in place before production deployment.

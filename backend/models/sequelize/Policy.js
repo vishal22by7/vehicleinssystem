@@ -95,7 +95,7 @@ const Policy = sequelize.define('Policy', {
     field: 'yearOfManufacture' // Map to existing database column for backward compatibility
   },
   engineCapacity: {
-    type: DataTypes.DECIMAL(5, 2),
+    type: DataTypes.DECIMAL(8, 2),
     allowNull: false
   },
   seatingCapacity: {

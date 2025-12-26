@@ -6,11 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "migrate": "node scripts/migrate-to-postgres.js",
-    "test:db": "node scripts/test-db-connection.js",
     "create-db": "node scripts/create-database.js",
     "seed-policy-types": "node scripts/seed-policy-types.js",
-    "view-db": "node scripts/view-db-data.js"
+    "view-db": "node scripts/view-db-data.js",
+    "verify-record": "node scripts/verify-record.js",
+    "verify-all-policies": "node scripts/verify-record.js --all-policies",
+    "verify-all-claims": "node scripts/verify-record.js --all-claims"
   },
   "dependencies": {
     "axios": "^1.13.2",

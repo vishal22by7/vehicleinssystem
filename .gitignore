@@ -12,7 +12,7 @@ frontend/.env.local
 smart-contracts/.env
 fabric-simulator/.env
 oracle-service/.env
-ml-analyzer/.env
+service/.env
 
 # Build outputs
 frontend/.next/
@@ -33,8 +33,8 @@ test_images/
 **/*.pyo
 **/*.pyd
 .Python
-ml-analyzer/venv/
-ml-analyzer/.venv/
+service/venv/
+service/.venv/
 venv/
 .venv/
 env/

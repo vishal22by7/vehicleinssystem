@@ -35,13 +35,13 @@ Start-ServiceInWindow -ServiceName "BACKEND API" -Command "cd backend; npm run d
 Start-ServiceInWindow -ServiceName "FRONTEND (Next.js)" -Command "cd frontend; npm run dev" -Color "Green"
 
 # 4. ML Analyzer (Python)
-Write-Host "Starting ML Analyzer..." -ForegroundColor Magenta
-$mlAnalyzerPath = Join-Path $PSScriptRoot "ml-analyzer"
-$venvActivate = Join-Path $mlAnalyzerPath "venv\Scripts\Activate.ps1"
+Write-Host "Starting ML Service..." -ForegroundColor Magenta
+$mlServicePath = Join-Path $PSScriptRoot "service"
+$venvActivate = Join-Path $mlServicePath "venv\Scripts\Activate.ps1"
 if (Test-Path $venvActivate) {
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'ML ANALYZER' -ForegroundColor Magenta; cd '$mlAnalyzerPath'; .\venv\Scripts\Activate.ps1; python app.py"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'ML SERVICE' -ForegroundColor Magenta; cd '$mlServicePath'; .\venv\Scripts\Activate.ps1; python app.py"
 } else {
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'ML ANALYZER' -ForegroundColor Magenta; cd '$mlAnalyzerPath'; python app.py"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'ML SERVICE' -ForegroundColor Magenta; cd '$mlServicePath'; python app.py"
 }
 Start-Sleep -Seconds 2
 

@@ -8,7 +8,7 @@
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:blockchain": "cd smart-contracts && npx hardhat node",
-    "dev:ml": "cd ml-analyzer && python app.py",
+    "dev:ml": "cd service && python app.py",
     "dev:fabric": "cd fabric-simulator && npm start",
     "dev:oracle": "cd oracle-service && npm start",
     "start:all": "node start-all-with-blockchain.js",

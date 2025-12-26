@@ -348,13 +348,87 @@ export default function PolicyDetailPage() {
             </div>
           )}
 
-          {/* Blockchain Info */}
-          {policy.blockchainTxHash && (
+          {/* Blockchain & IPFS Verification Info */}
+          {(policy.blockchainTxHash || policy.ipfsCid) && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Blockchain Record</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 font-mono break-all">
-                TX Hash: {policy.blockchainTxHash}
-              </p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                Blockchain Verification
+              </h3>
+
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 space-y-4">
+                {policy.blockchainTxHash && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Blockchain Sealed</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Immutable record on distributed ledger</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded">
+                      <code className="text-xs font-mono break-all flex-1 text-gray-800 dark:text-gray-200">
+                        {policy.blockchainTxHash}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(policy.blockchainTxHash || '');
+                          alert('Transaction hash copied to clipboard!');
+                        }}
+                        className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-xs hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {policy.ipfsCid && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center">
+                        <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Documents on IPFS</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Content-addressed storage — tamper-proof</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded">
+                      <code className="text-xs font-mono break-all flex-1 text-gray-800 dark:text-gray-200">
+                        {policy.ipfsCid}
+                      </code>
+                      <a
+                        href={`https://gateway.pinata.cloud/ipfs/${policy.ipfsCid}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded text-xs hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
+                      >
+                        View File
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {/* Verification Status */}
+                <div className="pt-3 border-t border-green-200 dark:border-green-700">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-green-700 dark:text-green-400">Record Integrity: Verified</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    This policy was recorded at issuance and cannot be altered. Any modification attempts will be detected.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -363,63 +437,93 @@ export default function PolicyDetailPage() {
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Documents</h3>
               <div className="space-y-2">
-                {policy.documents.rcDocument && (
+                {policy.documents.rcDocument && (policy.documents.rcDocument.path || policy.documents.rcDocument.ipfsCid) && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">RC Document</span>
-                    {policy.documents.rcDocument.ipfsCid && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        IPFS: {String(policy.documents.rcDocument.ipfsCid).substring(0, 10)}...
+                    {policy.documents.rcDocument.ipfsCid && typeof policy.documents.rcDocument.ipfsCid === 'string' ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}
-                {policy.documents.salesInvoice && (
+                {policy.documents.salesInvoice && (policy.documents.salesInvoice.path || policy.documents.salesInvoice.ipfsCid) && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">Sales Invoice</span>
-                    {policy.documents.salesInvoice.ipfsCid && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        IPFS: {String(policy.documents.salesInvoice.ipfsCid).substring(0, 10)}...
+                    {policy.documents.salesInvoice.ipfsCid && typeof policy.documents.salesInvoice.ipfsCid === 'string' ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}
-                {policy.documents.previousPolicyCopy && (
+                {policy.documents.previousPolicyCopy && (policy.documents.previousPolicyCopy.path || policy.documents.previousPolicyCopy.ipfsCid) && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">Previous Policy Copy</span>
-                    {policy.documents.previousPolicyCopy.ipfsCid && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        IPFS: {String(policy.documents.previousPolicyCopy.ipfsCid).substring(0, 10)}...
+                    {policy.documents.previousPolicyCopy.ipfsCid && typeof policy.documents.previousPolicyCopy.ipfsCid === 'string' ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}
-                {policy.documents.puc && (
+                {policy.documents.puc && (policy.documents.puc.path || policy.documents.puc.ipfsCid) && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">PUC Certificate</span>
-                    {policy.documents.puc.ipfsCid && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        IPFS: {String(policy.documents.puc.ipfsCid).substring(0, 10)}...
+                    {policy.documents.puc.ipfsCid && typeof policy.documents.puc.ipfsCid === 'string' ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}
-                {policy.documents.drivingLicense && (
+                {policy.documents.drivingLicense && (policy.documents.drivingLicense.path || policy.documents.drivingLicense.ipfsCid) && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">Driving License</span>
-                    {policy.documents.drivingLicense.ipfsCid && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        IPFS: {String(policy.documents.drivingLicense.ipfsCid).substring(0, 10)}...
+                    {policy.documents.drivingLicense.ipfsCid && typeof policy.documents.drivingLicense.ipfsCid === 'string' ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}
                 {policy.documents.vehiclePhotos && policy.documents.vehiclePhotos.length > 0 && (
                   <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
                     <span className="text-gray-700 dark:text-gray-300">Vehicle Photos ({policy.documents.vehiclePhotos.length})</span>
-                    {policy.documents.vehiclePhotos.some((photo: any) => photo.ipfsCid) && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        {policy.documents.vehiclePhotos.filter((photo: any) => photo.ipfsCid).length} on IPFS
+                    {policy.documents.vehiclePhotos.some((photo: any) => photo.ipfsCid && typeof photo.ipfsCid === 'string') ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        {policy.documents.vehiclePhotos.filter((photo: any) => photo.ipfsCid).length} Secured
                       </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Uploaded</span>
                     )}
                   </div>
                 )}

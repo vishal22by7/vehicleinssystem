@@ -57,15 +57,11 @@ export default function AdminPoliciesPage() {
     try {
       const res = await adminAPI.getPolicies();
       if (res.data.success) {
-        // Normalize data: map backend field names to frontend expectations
-        // Backend returns 'user' and 'policyTypeRef', but frontend expects 'userId' and 'policyTypeId'
         const policies = res.data.policies.map((p: any) => ({
           ...p,
           id: p.id || p._id,
           _id: p._id || p.id,
-          // Map 'user' to 'userId' for consistency
           userId: p.user || p.userId,
-          // Map 'policyTypeRef' to 'policyTypeId' for consistency
           policyTypeId: p.policyTypeRef || p.policyTypeId
         }));
         setPolicies(policies);

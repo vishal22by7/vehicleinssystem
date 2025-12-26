@@ -10,45 +10,45 @@ const { waitForBlockchain } = require('./utils/wait-for-blockchain');
 const isWindows = process.platform === 'win32';
 
 const services = [
-  { 
-    name: 'BLOCKCHAIN', 
-    command: 'npx', 
-    args: ['hardhat', 'node'], 
+  {
+    name: 'BLOCKCHAIN',
+    command: 'npx',
+    args: ['hardhat', 'node'],
     cwd: 'smart-contracts',
     wait: false // Don't wait for this one
   },
-  { 
-    name: 'BACKEND', 
-    command: 'npm', 
-    args: ['run', 'dev'], 
+  {
+    name: 'BACKEND',
+    command: 'npm',
+    args: ['run', 'dev'],
     cwd: 'backend',
     wait: true // Wait for blockchain before starting
   },
-  { 
-    name: 'FRONTEND', 
-    command: 'npm', 
-    args: ['run', 'dev'], 
+  {
+    name: 'FRONTEND',
+    command: 'npm',
+    args: ['run', 'dev'],
     cwd: 'frontend',
     wait: true
   },
-  { 
-    name: 'ML-ANALYZER', 
-    command: 'python', 
-    args: ['app.py'], 
-    cwd: 'ml-analyzer',
+  {
+    name: 'ML-SERVICE',
+    command: 'python',
+    args: ['app.py'],
+    cwd: 'service',
     wait: true
   },
-  { 
-    name: 'FABRIC', 
-    command: 'npm', 
-    args: ['start'], 
+  {
+    name: 'FABRIC',
+    command: 'npm',
+    args: ['start'],
     cwd: 'fabric-simulator',
     wait: true
   },
-  { 
-    name: 'ORACLE', 
-    command: 'npm', 
-    args: ['start'], 
+  {
+    name: 'ORACLE',
+    command: 'npm',
+    args: ['start'],
     cwd: 'oracle-service',
     wait: true
   },
@@ -59,22 +59,22 @@ const processes = [];
 function startService(service) {
   const projectRoot = path.resolve(__dirname);
   const cwd = path.join(projectRoot, service.cwd);
-  
+
   console.log(`\n🚀 Starting ${service.name}...`);
-  
+
   const options = {
     cwd,
     shell: isWindows,
     stdio: 'inherit',
     env: { ...process.env }
   };
-  
+
   const proc = spawn(service.command, service.args, options);
-  
+
   proc.on('error', (error) => {
     console.error(`❌ Error starting ${service.name}: ${error.message}`);
   });
-  
+
   processes.push({ name: service.name, process: proc });
 }
 

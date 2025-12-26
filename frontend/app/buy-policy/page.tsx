@@ -378,17 +378,21 @@ export default function BuyPolicyPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name } = e.target;
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    
+    if (files && files.length > 0) {
       if (name === 'vehiclePhotos') {
+        // For multiple file input, add ALL selected files
+        const newPhotos = Array.from(files);
         setFormData(prev => ({
           ...prev,
-          vehiclePhotos: [...prev.vehiclePhotos, file],
+          vehiclePhotos: [...prev.vehiclePhotos, ...newPhotos],
         }));
       } else {
+        // For single file inputs, use the first file
         setFormData(prev => ({
           ...prev,
-          [name]: file,
+          [name]: files[0],
         }));
       }
     }
@@ -1736,10 +1740,27 @@ export default function BuyPolicyPage() {
                         className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                       {formData.vehiclePhotos.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-sm text-green-600">
-                            ✓ {formData.vehiclePhotos.length} photo(s) selected
+                        <div className="mt-2 space-y-1">
+                          <p className="text-sm text-green-600 font-medium">
+                            ✓ {formData.vehiclePhotos.length} photo(s) selected:
                           </p>
+                          <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 ml-4">
+                            {formData.vehiclePhotos.map((photo: File, index: number) => (
+                              <li key={index} className="flex items-center justify-between">
+                                <span>• {photo.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFormData(prev => ({
+                                    ...prev,
+                                    vehiclePhotos: prev.vehiclePhotos.filter((_: File, i: number) => i !== index)
+                                  }))}
+                                  className="text-red-500 hover:text-red-700 ml-2"
+                                >
+                                  ✕
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
                     </div>

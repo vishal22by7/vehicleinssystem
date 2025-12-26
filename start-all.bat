@@ -43,10 +43,10 @@ REM Start Frontend
 start "FRONTEND (React)" cmd /k "cd frontend && npm run dev"
 
 REM Start ML Analyzer (Python)
-if exist "ml-analyzer\venv\Scripts\activate.bat" (
-    start "ML ANALYZER" cmd /k "cd ml-analyzer && venv\Scripts\activate.bat && python app.py"
+if exist "service\venv\Scripts\activate.bat" (
+    start "ML SERVICE" cmd /k "cd service && venv\Scripts\activate.bat && python app.py"
 ) else (
-    start "ML ANALYZER" cmd /k "cd ml-analyzer && python app.py"
+    start "ML SERVICE" cmd /k "cd service && python app.py"
 )
 
 REM Start Fabric Simulator
